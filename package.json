@@ -1,0 +1,19 @@
+{
+  "name": "reserv-bloomberg",
+  "version": "1.0.0",
+  "description": "Sistema de reservas del Lab Finanzas Itaú UdeC",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js",
+    "dev": "node --env-file-if-exists=.env --watch server.js",
+    "seed": "node seed.js",
+    "schedule": "node schedule.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "express": "^4.19.2"
+  }
+}

@@ -1,0 +1,19 @@
+# Blueprint de Render — https://render.com/docs/blueprint-spec
+# Importa este repo en Render como "Blueprint" y crea el servicio automáticamente.
+services:
+  - type: web
+    name: lab-finanzas-itau-udec
+    runtime: node
+    plan: starter          # "starter" ($7/mes) permite disco persistente. "free" = sin disco (los datos se reinician en cada deploy).
+    buildCommand: npm ci
+    startCommand: npm start
+    autoDeploy: true
+    envVars:
+      - key: ADMIN_PASSWORD
+        sync: false          # se define a mano en el panel de Render (no se sube al repo)
+      - key: DATA_DIR
+        value: /var/data
+    disk:
+      name: datos
+      mountPath: /var/data
+      sizeGB: 1

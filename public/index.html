@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lab Finanzas Itaú UdeC · Reservas</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">
+          <span class="ticker">LFI</span>
+        </div>
+        <div class="brand-text">
+          <strong>Lab Finanzas Itaú UdeC</strong>
+          <span id="brandInstitution">Sistema de Reservas</span>
+        </div>
+      </div>
+
+      <div class="side-panel">
+        <p class="side-label">Estado del laboratorio</p>
+        <ul class="lab-facts" id="labFacts"></ul>
+      </div>
+
+      <div class="side-panel">
+        <p class="side-label">Ocupación del periodo</p>
+        <div class="gauge">
+          <div class="gauge-bar"><span id="occupancyBar"></span></div>
+          <div class="gauge-meta">
+            <span id="occupancyValue">—</span>
+            <span id="occupancyHours" class="muted"></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="side-panel side-legend">
+        <p class="side-label">Cursos</p>
+        <ul class="legend" id="courseLegend"></ul>
+      </div>
+
+      <button class="side-admin" id="adminBtn">
+        <span class="lock">⚿</span> <span id="adminBtnLabel">Acceso administrador</span>
+      </button>
+
+      <footer class="side-foot">
+        <span>Universidad de Concepción</span>
+        <span class="muted" id="clock"></span>
+      </footer>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div class="topbar-line">
+          <div class="period-nav">
+            <button class="icon-btn" id="prevBtn" aria-label="Anterior">‹</button>
+            <button class="btn btn-ghost" id="todayBtn">Hoy</button>
+            <button class="icon-btn" id="nextBtn" aria-label="Siguiente">›</button>
+            <h1 id="periodTitle">—</h1>
+          </div>
+          <div class="topbar-right">
+            <div class="segmented" id="viewSwitch">
+              <button class="seg is-active" data-view="week">Semana</button>
+              <button class="seg" data-view="month">Mes</button>
+              <button class="seg" data-view="year">Año</button>
+            </div>
+            <div class="search-wrap">
+              <input type="search" id="filterInput" placeholder="Filtrar…" />
+            </div>
+            <button class="btn btn-primary" id="openReserveBtn">
+              <span class="plus">+</span> Reservar
+            </button>
+            <button class="icon-btn" id="adminIconBtn" title="Acceso administrador" aria-label="Acceso administrador">⚿</button>
+          </div>
+        </div>
+        <div class="stat-pills" id="statPills"></div>
+      </header>
+
+      <section class="view" id="viewRoot"></section>
+    </main>
+  </div>
+
+  <!-- Modal: nueva reserva -->
+  <div class="modal-backdrop" id="reserveModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="reserveTitle">
+      <div class="modal-head">
+        <h2 id="reserveTitle">Reservar bloque en el laboratorio</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="reserveForm" class="modal-body">
+        <div class="field-row">
+          <label class="field">
+            <span>Nombre completo</span>
+            <input name="name" type="text" required autocomplete="name" placeholder="Ada Lovelace" />
+          </label>
+          <label class="field">
+            <span>Correo institucional</span>
+            <input name="email" type="email" required autocomplete="email" placeholder="ada@universidad.cl" />
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Curso / Motivo</span>
+            <select name="course" id="courseSelect" required></select>
+          </label>
+          <label class="field">
+            <span>Detalle (opcional)</span>
+            <input name="purpose" type="text" placeholder="Ej: Simulación de portafolio" />
+          </label>
+        </div>
+        <div class="field-row">
+          <label class="field">
+            <span>Fecha</span>
+            <input name="date" type="date" required />
+          </label>
+          <label class="field">
+            <span>Inicio</span>
+            <select name="start" id="startSelect" required></select>
+          </label>
+          <label class="field">
+            <span>Término</span>
+            <select name="end" id="endSelect" required></select>
+          </label>
+        </div>
+        <label class="field">
+          <span>Notas para el encargado (opcional)</span>
+          <textarea name="notes" rows="2" placeholder="Requiero acceso a 4 terminales / datos de renta fija…"></textarea>
+        </label>
+
+        <div class="form-msg" id="reserveMsg" hidden></div>
+
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary" id="submitReserve">Confirmar reserva</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: detalle / cancelar -->
+  <div class="modal-backdrop" id="detailModal" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2>Detalle de la reserva</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal: confirmación con código -->
+  <div class="modal-backdrop" id="successModal" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="successTitle">Solicitud enviada</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="muted" id="successMsg">Guarda este código para consultar o cancelar tu reserva.</p>
+        <div class="code-box" id="successCode">—</div>
+        <div class="modal-foot">
+          <button class="btn btn-primary" data-close>Entendido</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: acceso administrador -->
+  <div class="modal-backdrop" id="loginModal" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2>Acceso administrador</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <form id="loginForm" class="modal-body">
+        <label class="field">
+          <span>Contraseña</span>
+          <input name="password" type="password" required autocomplete="current-password" placeholder="••••••••" />
+        </label>
+        <div class="form-msg" id="loginMsg" hidden></div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-close>Cancelar</button>
+          <button type="submit" class="btn btn-primary">Entrar</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="toast-stack" id="toastStack"></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
