@@ -1,5 +1,5 @@
 import express from 'express';
-import { randomUUID, randomBytes, timingSafeEqual } from 'node:crypto';
+import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -8,7 +8,9 @@ import {
   addReservation,
   updateReservation,
   removeReservation,
+  replaceAllReservations,
   hasConflict,
+  storageBackend,
 } from './db.js';
 import { buildSchedule } from './schedule.js';
 
@@ -18,6 +20,26 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
+
+// En un despliegue nuevo (base vacía) carga el horario del semestre automáticamente.
+// Ponte BOOTSTRAP_SCHEDULE=0 para desactivarlo. Se ejecuta una sola vez por instancia.
+let bootstrapPromise = null;
+function ensureBootstrap() {
+  if (!bootstrapPromise) {
+    bootstrapPromise = (async () => {
+      if (process.env.BOOTSTRAP_SCHEDULE === '0') return;
+      const existing = await getReservations();
+      if (existing.length > 0) return;
+      await replaceAllReservations(buildSchedule());
+      console.log('  Horario del semestre cargado automáticamente (base vacía).');
+    })().catch((err) => {
+      bootstrapPromise = null; // permite reintentar en la siguiente petición
+      throw err;
+    });
+  }
+  return bootstrapPromise;
+}
+app.use((_req, _res, next) => ensureBootstrap().then(() => next()).catch(next));
 
 // ---------------------------------------------------------------------------
 // Configuración del laboratorio
@@ -55,7 +77,6 @@ if (!process.env.ADMIN_PASSWORD) {
   console.warn('     Define ADMIN_PASSWORD antes de usar esto en producción.\n');
 }
 
-const sessions = new Map(); // token -> { createdAt }
 const SESSION_TTL = 1000 * 60 * 60 * 8; // 8 horas
 
 function checkPassword(candidate) {
@@ -64,12 +85,27 @@ function checkPassword(candidate) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
+// Token sin estado (HMAC firmado con ADMIN_PASSWORD). No requiere almacenamiento,
+// así funciona igual en un servidor normal o en funciones serverless.
+function issueToken() {
+  const exp = String(Date.now() + SESSION_TTL);
+  const sig = createHmac('sha256', ADMIN_PASSWORD).update(exp).digest('hex');
+  return `${exp}.${sig}`;
+}
+
+function validToken(token) {
+  const [exp, sig] = String(token || '').split('.');
+  if (!exp || !sig || Date.now() > Number(exp)) return false;
+  const expected = createHmac('sha256', ADMIN_PASSWORD).update(exp).digest('hex');
+  const a = Buffer.from(sig);
+  const b = Buffer.from(expected);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
 function requireAdmin(req, res, next) {
   const header = req.headers.authorization || '';
   const token = header.startsWith('Bearer ') ? header.slice(7) : null;
-  const session = token && sessions.get(token);
-  if (!session || Date.now() - session.createdAt > SESSION_TTL) {
-    if (token) sessions.delete(token);
+  if (!validToken(token)) {
     return res.status(401).json({ errors: ['Sesión de administrador inválida o expirada.'] });
   }
   next();
@@ -258,14 +294,11 @@ app.post('/api/admin/login', (req, res) => {
   if (!checkPassword(req.body?.password || '')) {
     return res.status(401).json({ errors: ['Contraseña incorrecta.'] });
   }
-  const token = randomBytes(24).toString('hex');
-  sessions.set(token, { createdAt: Date.now() });
-  res.json({ token, expiresIn: SESSION_TTL });
+  res.json({ token: issueToken(), expiresIn: SESSION_TTL });
 });
 
-app.post('/api/admin/logout', requireAdmin, (req, res) => {
-  const token = req.headers.authorization.slice(7);
-  sessions.delete(token);
+app.post('/api/admin/logout', requireAdmin, (_req, res) => {
+  // El token es sin estado: el cliente simplemente lo descarta.
   res.json({ ok: true });
 });
 
@@ -336,20 +369,14 @@ app.delete('/api/admin/reservations/:id', requireAdmin, async (req, res) => {
 
 app.get('*', (_req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
 
-// En un despliegue nuevo (o disco vacío) carga el horario del semestre automáticamente.
-// Ponte BOOTSTRAP_SCHEDULE=0 para desactivarlo.
-async function bootstrap() {
-  if (process.env.BOOTSTRAP_SCHEDULE === '0') return;
-  const existing = await getReservations();
-  if (existing.length > 0) return;
-  for (const r of buildSchedule()) await addReservation(r);
-  console.log('  Horario del semestre cargado automáticamente (base vacía).');
+// Servidor tradicional (local, Render, Railway…). En Vercel se usa la exportación de abajo.
+const isMainModule = process.argv[1] && import.meta.url === `file://${process.argv[1]}`;
+if (isMainModule) {
+  app.listen(PORT, () => {
+    console.log(`\n  ${LAB_CONFIG.name}  ·  almacenamiento: ${storageBackend}`);
+    console.log(`  Reservas disponibles en  http://localhost:${PORT}`);
+    console.log(`  Panel de administración   http://localhost:${PORT}/admin\n`);
+  });
 }
 
-await bootstrap();
-
-app.listen(PORT, () => {
-  console.log(`\n  ${LAB_CONFIG.name}`);
-  console.log(`  Reservas disponibles en  http://localhost:${PORT}`);
-  console.log(`  Panel de administración   http://localhost:${PORT}/admin\n`);
-});
+export default app;

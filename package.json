@@ -14,6 +14,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.4",
     "express": "^4.19.2"
   }
 }
