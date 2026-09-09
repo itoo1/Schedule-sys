@@ -43,6 +43,14 @@ function toMin(hhmm) { const [h, m] = hhmm.split(':').map(Number); return h * 60
 function minToHHMM(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 function sameYMD(a, b) { return ymd(a) === ymd(b); }
 function isToday(d) { return sameYMD(d, new Date()); }
+function isMobile() { return window.matchMedia('(max-width: 640px)').matches; }
+function snapToOpenDay(d, dir = 1) {
+  const open = state.config?.openDays || [1, 2, 3, 4, 5];
+  let x = startOfDay(d);
+  let guard = 0;
+  while (!open.includes(x.getDay()) && guard++ < 7) x = addDays(x, dir);
+  return x;
+}
 
 /* ---------------------------------------------------------------- colors */
 function courseColor(course) {
@@ -195,12 +203,17 @@ function renderTopbar() {
   }
 
   if (state.view === 'week') {
-    const mon = mondayOf(a);
-    const sat = addDays(mon, 5);
-    const sameMonth = mon.getMonth() === sat.getMonth();
-    t.textContent = sameMonth
-      ? `${mon.getDate()} – ${sat.getDate()} ${MESES[mon.getMonth()]} ${mon.getFullYear()}`
-      : `${mon.getDate()} ${MESES[mon.getMonth()].slice(0, 3)} – ${sat.getDate()} ${MESES[sat.getMonth()].slice(0, 3)} ${sat.getFullYear()}`;
+    if (isMobile()) {
+      const d = snapToOpenDay(a);
+      t.textContent = `${DOW_SHORT[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`;
+    } else {
+      const mon = mondayOf(a);
+      const fri = addDays(mon, 4);
+      const sameMonth = mon.getMonth() === fri.getMonth();
+      t.textContent = sameMonth
+        ? `${mon.getDate()} – ${fri.getDate()} ${MESES[mon.getMonth()]} ${mon.getFullYear()}`
+        : `${mon.getDate()} ${MESES[mon.getMonth()].slice(0, 3)} – ${fri.getDate()} ${MESES[fri.getMonth()].slice(0, 3)} ${fri.getFullYear()}`;
+    }
   } else if (state.view === 'month') {
     t.textContent = `${MESES[a.getMonth()]} ${a.getFullYear()}`;
   } else {
@@ -228,12 +241,14 @@ function renderWeek(root) {
   for (let m = openMin; m < closeMin; m += 60) hours.push(m);
   const pxPerMin = 52 / 60;
 
-  const mon = mondayOf(state.anchor);
-  const days = c.openDays.map((dow) => {
-    // dow: 1..6 -> offset from Monday
-    const offset = dow === 0 ? 6 : dow - 1;
-    return addDays(mon, offset);
-  });
+  let days;
+  if (isMobile()) {
+    // En móvil la vista "Semana" muestra un solo día (se navega día a día).
+    days = [snapToOpenDay(state.anchor)];
+  } else {
+    const mon = mondayOf(state.anchor);
+    days = c.openDays.map((dow) => addDays(mon, dow === 0 ? 6 : dow - 1));
+  }
 
   const wrap = document.createElement('div');
   wrap.className = 'week-scroll';
@@ -325,7 +340,9 @@ function renderMonth(root) {
         + (matchesFilter(r) ? '' : ' is-dim')
         + (r.status === 'pending' ? ' is-pending' : ''), `${r.start} ${r.course}`);
       chip.style.setProperty('--ev', courseColor(r.course));
-      chip.addEventListener('click', (e) => { e.stopPropagation(); openDetail(r); });
+      if (!isMobile()) {
+        chip.addEventListener('click', (e) => { e.stopPropagation(); openDetail(r); });
+      }
       cell.appendChild(chip);
     });
     if (dayRes.length > 3) cell.appendChild(el('div', 'mg-more', `+${dayRes.length - 3} más`));
@@ -460,7 +477,8 @@ function openReserve(prefill = {}) {
 
   const dateInput = form.elements.date;
   dateInput.min = ymd(new Date());
-  dateInput.value = prefill.date || ymd(state.anchor > new Date() ? state.anchor : new Date());
+  const base = state.anchor > new Date() ? state.anchor : new Date();
+  dateInput.value = prefill.date || ymd(snapToOpenDay(base));
   if (prefill.start) {
     form.elements.start.value = prefill.start;
     updateEndOptions();
@@ -744,9 +762,15 @@ function renderAdmin(root) {
 
 /* ---------------------------------------------------------------- navigation */
 function step(dir) {
-  if (state.view === 'week') state.anchor = addDays(state.anchor, dir * 7);
-  else if (state.view === 'month') state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + dir, 1);
-  else state.anchor = new Date(state.anchor.getFullYear() + dir, 0, 1);
+  if (state.view === 'week') {
+    state.anchor = isMobile()
+      ? snapToOpenDay(addDays(state.anchor, dir), dir)
+      : addDays(state.anchor, dir * 7);
+  } else if (state.view === 'month') {
+    state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + dir, 1);
+  } else {
+    state.anchor = new Date(state.anchor.getFullYear() + dir, 0, 1);
+  }
   refresh();
 }
 function syncNav() {
@@ -757,10 +781,21 @@ function syncNav() {
 /* ---------------------------------------------------------------- init */
 function bindUI() {
   document.getElementById('openReserveBtn').addEventListener('click', () => openReserve());
+  document.getElementById('fab').addEventListener('click', () => openReserve());
   document.getElementById('prevBtn').addEventListener('click', () => step(-1));
   document.getElementById('nextBtn').addEventListener('click', () => step(1));
   document.getElementById('todayBtn').addEventListener('click', () => { state.anchor = startOfDay(new Date()); refresh(); });
   document.getElementById('reserveForm').addEventListener('submit', submitReserve);
+
+  // Re-render al cruzar el breakpoint móvil (semana ↔ día, grillas, etc.)
+  let wasMobile = isMobile();
+  let rz;
+  window.addEventListener('resize', () => {
+    clearTimeout(rz);
+    rz = setTimeout(() => {
+      if (isMobile() !== wasMobile) { wasMobile = isMobile(); render(); }
+    }, 180);
+  });
 
   document.querySelectorAll('#viewSwitch .seg').forEach((btn) => {
     btn.addEventListener('click', () => {

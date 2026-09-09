@@ -654,5 +654,80 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
 @media (max-width: 1080px) {
   .app { grid-template-columns: 1fr; }
   .sidebar { display: none; }
-  .search-wrap input { width: 160px; }
+  .search-wrap input { width: 150px; }
+}
+
+/* ---------------------------------------------------------------- móvil */
+.fab {
+  display: none;
+  position: fixed; right: 16px; bottom: 16px;
+  width: 54px; height: 54px;
+  border-radius: 50%;
+  border: none;
+  background: linear-gradient(180deg, #ff9838, #ff7d12);
+  color: #12131a;
+  font-size: 28px; font-weight: 700; line-height: 1;
+  box-shadow: 0 12px 32px -8px rgba(255, 138, 30, 0.7);
+  z-index: 60;
+  align-items: center; justify-content: center;
+}
+.fab:active { transform: scale(0.94); }
+
+@media (max-width: 640px) {
+  .fab { display: flex; }
+
+  .topbar { padding: 10px 12px; gap: 8px; }
+  .topbar-line { gap: 8px; }
+  .period-nav { gap: 6px; flex: 1 1 100%; }
+  .period-nav h1 {
+    font-size: 14px; margin-left: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    text-transform: none;
+  }
+  .topbar-right { width: 100%; }
+  .segmented { flex: 1; padding: 3px; }
+  .seg { flex: 1; text-align: center; padding: 8px 0; }
+  .search-wrap { display: none; }
+  #openReserveBtn { display: none; }
+  #adminIconBtn { flex: none; }
+  .stat-pills { display: none; }
+
+  .view { padding: 14px 12px 96px; }
+
+  .week-grid { min-width: 0; }
+  .wg-time { font-size: 9.5px; padding-right: 5px; }
+  .wg-timecol, .wg-corner { }
+
+  .month-grid { gap: 1px; }
+  .mg-day { min-height: 62px; padding: 4px 3px; gap: 3px; }
+  .mg-daynum { font-size: 11px; }
+  .mg-day.is-today .mg-daynum { width: 18px; height: 18px; }
+  .mg-chip {
+    height: 5px; padding: 0; font-size: 0;
+    border: none; border-radius: 2px;
+    background: var(--ev, var(--accent));
+  }
+  .mg-chip.is-pending { opacity: 0.55; }
+  .mg-chip.is-pending::after { content: none; }
+  .mg-more { font-size: 9px; padding-left: 2px; }
+
+  .year-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  .yg-month { padding: 10px; }
+  .yg-month h3 { font-size: 11px; margin-bottom: 8px; }
+  .yg-cell:hover { transform: none; outline: none; }
+
+  .day-list .dl-item { flex-wrap: wrap; }
+  .dl-meta { margin-left: 0; width: 100%; }
+
+  .modal-backdrop { padding: 0; place-items: end stretch; }
+  .modal, .modal-sm { width: 100%; border-radius: 16px 16px 0 0; max-height: 94vh; }
+  .field-row { gap: 10px; }
+  .field { flex-basis: 100%; }
+  .field-row .field { flex-basis: calc(50% - 5px); }
+
+  .admin { }
+  .admin-head { gap: 10px; margin-bottom: 14px; }
+  .admin-head h2 { font-size: 16px; }
+  .admin-tabs { width: 100%; }
+  .admin-tab { flex: 1; text-align: center; padding: 8px 4px; }
 }
