@@ -481,6 +481,33 @@ function updateEndOptions() {
   if ([...endSel.options].some((o) => o.value === prev)) endSel.value = prev;
 }
 
+// Selector de fecha en formato chileno: día / mes / año.
+function fillDateParts(targetStr) {
+  const [ty, tm, td] = targetStr.split('-').map(Number);
+  const daySel = document.getElementById('dateDay');
+  const monSel = document.getElementById('dateMonth');
+  const yearSel = document.getElementById('dateYear');
+
+  daySel.innerHTML = Array.from({ length: 31 }, (_, i) =>
+    `<option value="${i + 1}">${i + 1}</option>`).join('');
+  monSel.innerHTML = MESES.map((m, i) =>
+    `<option value="${i + 1}">${m[0].toUpperCase()}${m.slice(1)}</option>`).join('');
+  const nowY = new Date().getFullYear();
+  const years = [...new Set([nowY, ty, ty + 1])].sort((a, b) => a - b);
+  yearSel.innerHTML = years.map((y) => `<option value="${y}">${y}</option>`).join('');
+
+  daySel.value = td;
+  monSel.value = tm;
+  yearSel.value = ty;
+}
+
+function readDateParts() {
+  const d = Number(document.getElementById('dateDay').value);
+  const m = Number(document.getElementById('dateMonth').value);
+  const y = Number(document.getElementById('dateYear').value);
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
 function openReserve(prefill = {}) {
   const form = document.getElementById('reserveForm');
   form.reset();
@@ -489,8 +516,9 @@ function openReserve(prefill = {}) {
   fillTimeOptions();
 
   const cfg = state.config;
-  const earliest = new Date();
-  earliest.setDate(earliest.getDate() + (cfg.minAdvanceDays || 0));
+  const rawEarliest = new Date();
+  rawEarliest.setDate(rawEarliest.getDate() + (cfg.minAdvanceDays || 0));
+  const earliest = snapToOpenDay(rawEarliest);
   const earliestStr = ymd(earliest);
 
   // Aviso visible con las reglas de reserva.
@@ -505,12 +533,10 @@ function openReserve(prefill = {}) {
   document.getElementById('reserveNoteText').innerHTML = noteParts.join(' ');
   noteEl.hidden = noteParts.length === 0;
 
-  const dateInput = form.elements.date;
-  dateInput.min = earliestStr;
   const base = state.anchor > earliest ? state.anchor : earliest;
   let wanted = prefill.date && prefill.date >= earliestStr ? prefill.date : ymd(snapToOpenDay(base));
   if (wanted < earliestStr) wanted = ymd(snapToOpenDay(earliest));
-  dateInput.value = wanted;
+  fillDateParts(wanted);
   if (prefill.start) {
     form.elements.start.value = prefill.start;
     updateEndOptions();
@@ -526,6 +552,7 @@ async function submitReserve(e) {
   const btn = document.getElementById('submitReserve');
   const msg = document.getElementById('reserveMsg');
   const payload = Object.fromEntries(new FormData(form).entries());
+  payload.date = readDateParts();
   btn.disabled = true;
   btn.textContent = 'Enviando…';
   try {

@@ -122,11 +122,15 @@
             <input name="purpose" type="text" placeholder="Ej: Simulación de portafolio" />
           </label>
         </div>
+        <div class="field">
+          <span>Fecha <em class="field-hint">(día / mes / año)</em></span>
+          <div class="date-parts">
+            <select id="dateDay" aria-label="Día" required></select>
+            <select id="dateMonth" aria-label="Mes" required></select>
+            <select id="dateYear" aria-label="Año" required></select>
+          </div>
+        </div>
         <div class="field-row">
-          <label class="field">
-            <span>Fecha</span>
-            <input name="date" type="date" required />
-          </label>
           <label class="field">
             <span>Inicio</span>
             <select name="start" id="startSelect" required></select>
