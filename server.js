@@ -51,7 +51,7 @@ const LAB_CONFIG = {
   openHour: '08:00',
   closeHour: '20:00',
   slotMinutes: 60,
-  terminals: 8,
+  terminals: 15,
   maxHoursPerReservation: 4,
   minAdvanceDays: 7, // anticipación mínima para solicitar una reserva
   requireApproval: true, // las reservas quedan pendientes hasta que un administrador las aprueba
