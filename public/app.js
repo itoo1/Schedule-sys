@@ -176,7 +176,7 @@ function renderSidebar() {
   if (c.minAdvanceDays > 0 || c.requireApproval) {
     const parts = [];
     if (c.minAdvanceDays > 0) parts.push(`Reserva con <strong>${c.minAdvanceDays}+ días</strong> de anticipación`);
-    if (c.requireApproval) parts.push('queda <strong>pendiente de aprobación</strong>');
+    if (c.requireApproval) parts.push('las reservas quedan <strong>pendientes de aprobación</strong>, verifica que esté aprobada');
     document.getElementById('topbarNoteText').innerHTML = parts.join(' · ');
     document.getElementById('topbarNote').hidden = false;
   } else {
@@ -499,7 +499,7 @@ function openReserve(prefill = {}) {
     noteParts.push(`Las reservas se solicitan con al menos <strong>${cfg.minAdvanceDays} días</strong> de anticipación (desde el ${fmtLongDate(earliestStr)}).`);
   }
   if (cfg.requireApproval) {
-    noteParts.push('Al enviarla queda <strong>pendiente</strong>: el encargado del laboratorio debe aprobarla antes de que el bloque quede reservado.');
+    noteParts.push('Las reservas quedan <strong>pendientes de aprobación</strong>: el encargado del laboratorio debe aprobarla antes de que el bloque quede reservado. Verifica que esté aprobada.');
   }
   const noteEl = document.getElementById('reserveNote');
   document.getElementById('reserveNoteText').innerHTML = noteParts.join(' ');
@@ -534,7 +534,7 @@ async function submitReserve(e) {
     const pending = res.status === 'pending';
     document.getElementById('successTitle').textContent = pending ? 'Solicitud enviada' : 'Reserva confirmada';
     document.getElementById('successMsg').textContent = pending
-      ? 'Tu reserva quedó pendiente de aprobación por un administrador. Guarda este código para consultar su estado o cancelarla.'
+      ? 'Tu reserva quedó pendiente de aprobación. Guarda este código para consultar su estado (verifica que esté aprobada) o cancelarla.'
       : 'Guarda este código para cancelar tu reserva.';
     document.getElementById('successCode').textContent = res.code;
     showModal('successModal');
