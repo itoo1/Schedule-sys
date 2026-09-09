@@ -53,6 +53,7 @@ const LAB_CONFIG = {
   slotMinutes: 60,
   terminals: 8,
   maxHoursPerReservation: 4,
+  minAdvanceDays: 7, // anticipación mínima para solicitar una reserva
   requireApproval: true, // las reservas quedan pendientes hasta que un administrador las aprueba
   courses: [
     'Valoración de Empresas',
@@ -168,8 +169,21 @@ function validateReservation(body) {
     errors.push(`La reserva no puede exceder ${LAB_CONFIG.maxHoursPerReservation} horas.`);
   }
 
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const todayStr = now.toISOString().slice(0, 10);
   if (date < todayStr) errors.push('No se pueden crear reservas en fechas pasadas.');
+
+  if (LAB_CONFIG.minAdvanceDays > 0) {
+    const minDate = new Date(now);
+    minDate.setUTCDate(minDate.getUTCDate() + LAB_CONFIG.minAdvanceDays);
+    const minStr = minDate.toISOString().slice(0, 10);
+    if (date < minStr) {
+      errors.push(
+        `Las reservas se solicitan con al menos ${LAB_CONFIG.minAdvanceDays} días de anticipación. ` +
+        `La fecha más próxima disponible es el ${minStr}.`
+      );
+    }
+  }
 
   if (errors.length) return { errors };
 

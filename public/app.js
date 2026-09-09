@@ -169,7 +169,19 @@ function renderSidebar() {
     <li><span>Horario</span><span>${c.openHour}–${c.closeHour}</span></li>
     <li><span>Días</span><span>${openDaysLabel}</span></li>
     <li><span>Máx. por reserva</span><span>${c.maxHoursPerReservation} h</span></li>
+    <li><span>Anticipación mínima</span><span>${c.minAdvanceDays} días</span></li>
+    <li><span>Aprobación</span><span>${c.requireApproval ? 'requerida' : 'automática'}</span></li>
   `;
+
+  if (c.minAdvanceDays > 0 || c.requireApproval) {
+    const parts = [];
+    if (c.minAdvanceDays > 0) parts.push(`Reserva con <strong>${c.minAdvanceDays}+ días</strong> de anticipación`);
+    if (c.requireApproval) parts.push('queda <strong>pendiente de aprobación</strong>');
+    document.getElementById('topbarNoteText').innerHTML = parts.join(' · ');
+    document.getElementById('topbarNote').hidden = false;
+  } else {
+    document.getElementById('topbarNote').hidden = true;
+  }
 
   const s = state.stats || {};
   const occ = s.occupancy == null ? 0 : s.occupancy;
@@ -196,6 +208,7 @@ function renderTopbar() {
   navButtons.forEach((b) => (b.style.display = state.admin.open ? 'none' : ''));
 
   t.style.textTransform = state.admin.open ? 'none' : '';
+  document.getElementById('topbarNote').hidden = state.admin.open || !(state.config.minAdvanceDays > 0 || state.config.requireApproval);
   if (state.admin.open) {
     t.textContent = 'Panel de administración';
     document.getElementById('statPills').innerHTML = '';
@@ -475,10 +488,29 @@ function openReserve(prefill = {}) {
   courseSel.innerHTML = state.config.courses.map((c) => `<option>${escapeHtml(c)}</option>`).join('');
   fillTimeOptions();
 
+  const cfg = state.config;
+  const earliest = new Date();
+  earliest.setDate(earliest.getDate() + (cfg.minAdvanceDays || 0));
+  const earliestStr = ymd(earliest);
+
+  // Aviso visible con las reglas de reserva.
+  const noteParts = [];
+  if (cfg.minAdvanceDays > 0) {
+    noteParts.push(`Las reservas se solicitan con al menos <strong>${cfg.minAdvanceDays} días</strong> de anticipación (desde el ${fmtLongDate(earliestStr)}).`);
+  }
+  if (cfg.requireApproval) {
+    noteParts.push('Al enviarla queda <strong>pendiente</strong>: el encargado del laboratorio debe aprobarla antes de que el bloque quede reservado.');
+  }
+  const noteEl = document.getElementById('reserveNote');
+  document.getElementById('reserveNoteText').innerHTML = noteParts.join(' ');
+  noteEl.hidden = noteParts.length === 0;
+
   const dateInput = form.elements.date;
-  dateInput.min = ymd(new Date());
-  const base = state.anchor > new Date() ? state.anchor : new Date();
-  dateInput.value = prefill.date || ymd(snapToOpenDay(base));
+  dateInput.min = earliestStr;
+  const base = state.anchor > earliest ? state.anchor : earliest;
+  let wanted = prefill.date && prefill.date >= earliestStr ? prefill.date : ymd(snapToOpenDay(base));
+  if (wanted < earliestStr) wanted = ymd(snapToOpenDay(earliest));
+  dateInput.value = wanted;
   if (prefill.start) {
     form.elements.start.value = prefill.start;
     updateEndOptions();

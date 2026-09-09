@@ -10,7 +10,8 @@ tipo terminal financiera.
 - **Vista Mes**: calendario con las reservas de cada día y lista de próximas reservas.
 - **Vista Año**: mapa de calor (estilo GitHub) con la ocupación diaria de los 12 meses.
 - **Reserva con validación**: sin choques de horario, dentro del horario del laboratorio,
-  máximo de horas por reserva, no se permiten fechas pasadas.
+  máximo de horas por reserva, y **anticipación mínima** (`minAdvanceDays`, 7 días por
+  defecto). Las reglas se muestran en la barra superior y en el formulario de reserva.
 - **Aprobación por administrador**: cada reserva entra como *pendiente* y no ocupa el
   horario en firme hasta que un administrador la aprueba. Panel en `/admin` (o el ícono
   ⚿) con pestañas Pendientes / Aprobadas / Todas y acciones aprobar · rechazar · eliminar.
