@@ -22,7 +22,7 @@ tipo terminal financiera.
 
 ## Requisitos
 
-- Node.js 18 o superior
+- Node.js 20 o superior
 
 ## Puesta en marcha
 
@@ -70,7 +70,39 @@ número de terminales, duración máxima por reserva y el listado de cursos.
 ## Almacenamiento
 
 Las reservas se guardan en `data/reservations.json` (escritura atómica, sin base de
-datos externa). Borra ese archivo para reiniciar el sistema.
+datos externa). Borra ese archivo para reiniciar el sistema. La ruta se puede cambiar
+con la variable `DATA_DIR` (útil para montar un disco persistente en la nube).
+
+## Despliegue en la nube
+
+GitHub guarda el código, pero **no ejecuta el servidor** (GitHub Pages solo sirve
+sitios estáticos y esta app tiene backend). Hay que conectar el repo a un hosting que
+corra Node.
+
+### Opción recomendada: Render (con `render.yaml` incluido)
+
+1. Sube el repo a GitHub (ver abajo).
+2. En <https://dashboard.render.com> → **New → Blueprint** → elige el repo.
+   Render lee `render.yaml` y crea el servicio web + el disco persistente.
+3. En **Environment**, define `ADMIN_PASSWORD` con tu clave.
+4. Deploy. La primera vez, si la base está vacía, el servidor **carga solo** el
+   horario del semestre (`BOOTSTRAP_SCHEDULE`).
+
+El plan `starter` ($7/mes) es necesario para el disco persistente. Con el plan `free`
+la app funciona pero **los datos se reinician en cada despliegue** y el servicio se
+suspende tras 15 min de inactividad (arranca de nuevo al recibir visitas).
+
+Alternativas equivalentes: **Railway** (crédito mensual, volúmenes) o **Fly.io**
+(volúmenes). En todas: `startCommand = npm start`, define `ADMIN_PASSWORD` y monta un
+volumen apuntando `DATA_DIR` a esa ruta.
+
+### Subir el repo a GitHub
+
+```bash
+git push -u origin main
+```
+
+(El repo remoto ya está configurado como `origin`.)
 
 ## API
 
@@ -90,3 +122,12 @@ datos externa). Borra ese archivo para reiniciar el sistema.
 
 Para operar sin aprobación (reservas confirmadas al instante), pon
 `requireApproval: false` en `LAB_CONFIG`.
+
+## Variables de entorno
+
+| Variable | Descripción |
+| --- | --- |
+| `ADMIN_PASSWORD` | Clave del panel de administración (obligatoria en producción). |
+| `PORT` | Puerto del servidor (por defecto 3000; el hosting suele fijarlo). |
+| `DATA_DIR` | Carpeta donde se guarda `reservations.json` (p. ej. un disco persistente). |
+| `BOOTSTRAP_SCHEDULE` | `0` desactiva la carga automática del horario en una base vacía. |
