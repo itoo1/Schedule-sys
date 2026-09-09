@@ -19,7 +19,18 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
-app.use(express.static(join(__dirname, 'public')));
+
+// El API nunca se cachea (ni en el navegador ni en el CDN de Vercel).
+app.use('/api', (_req, res, next) => {
+  res.set('Cache-Control', 'no-store, max-age=0');
+  next();
+});
+
+app.use(express.static(join(__dirname, 'public'), {
+  setHeaders: (res, path) => {
+    if (path.endsWith('.html')) res.set('Cache-Control', 'no-cache');
+  },
+}));
 
 // En un despliegue nuevo (base vacía) carga el horario del semestre automáticamente.
 // Ponte BOOTSTRAP_SCHEDULE=0 para desactivarlo. Se ejecuta una sola vez por instancia.
