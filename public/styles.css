@@ -340,6 +340,17 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
 /* ---------------------------------------------------------------- view host */
 .view { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 22px 26px 40px; }
 
+.app-foot {
+  flex: none;
+  text-align: center;
+  padding: 10px 16px;
+  border-top: 1px solid var(--line);
+  background: var(--bg-elev);
+  font-size: 11px;
+  color: var(--text-mute);
+}
+.app-foot strong { color: var(--text-dim); font-weight: 600; }
+
 /* ---------------------------------------------------------------- week grid */
 .week-grid {
   display: grid;
@@ -723,7 +734,8 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
 .fab:active { transform: scale(0.94); }
 
 @media (max-width: 640px) {
-  .fab { display: flex; }
+  .fab { display: flex; bottom: 48px; }
+  .app-foot { font-size: 10px; padding: 8px 12px; }
 
   .topbar { padding: 10px 12px; gap: 8px; }
   .topbar-line { gap: 8px; }
