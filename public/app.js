@@ -698,6 +698,22 @@ async function loginSubmit(e) {
   }
 }
 
+async function resyncSchedule() {
+  const ok = confirm(
+    'Esto BORRA todas las reservas actuales (incluidas las hechas por estudiantes) ' +
+    'y las reemplaza por el horario fijo del semestre definido en schedule.js.\n\n' +
+    '¿Continuar?'
+  );
+  if (!ok) return;
+  try {
+    const res = await adminApi('/api/admin/resync-schedule', { method: 'POST' });
+    toast(res.message || 'Horario recargado', 'success');
+    await Promise.all([loadAdminList(), refresh()]);
+  } catch (err) {
+    toast((err.data?.errors || ['No se pudo recargar el horario.'])[0], 'error');
+  }
+}
+
 async function adminLogout() {
   try { await adminApi('/api/admin/logout', { method: 'POST' }); } catch { /* ignore */ }
   setAdminToken(null);
@@ -768,9 +784,13 @@ function renderAdmin(root) {
   bar.style.marginTop = '-6px';
   const backBtn = el('button', 'btn btn-ghost', '‹ Volver al calendario');
   backBtn.addEventListener('click', closeAdmin);
+  const resyncBtn = el('button', 'btn btn-ghost', '↻ Recargar horario fijo del semestre');
+  resyncBtn.title = 'Vuelve a cargar el horario definido en schedule.js (borra todo lo demás)';
+  resyncBtn.addEventListener('click', resyncSchedule);
   const outBtn = el('button', 'btn btn-no', 'Cerrar sesión');
   outBtn.addEventListener('click', adminLogout);
   bar.appendChild(backBtn);
+  bar.appendChild(resyncBtn);
   bar.appendChild(outBtn);
   wrap.appendChild(bar);
 

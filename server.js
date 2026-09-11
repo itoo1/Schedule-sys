@@ -392,6 +392,15 @@ app.delete('/api/admin/reservations/:id', requireAdmin, async (req, res) => {
   res.json({ message: 'Reserva eliminada.' });
 });
 
+// Vuelve a cargar el horario fijo del semestre (definido en schedule.js),
+// BORRANDO todas las reservas actuales (incluidas las hechas por estudiantes).
+// Útil tras editar schedule.js para que el cambio llegue también a producción.
+app.post('/api/admin/resync-schedule', requireAdmin, async (_req, res) => {
+  const reservations = buildSchedule();
+  await replaceAllReservations(reservations);
+  res.json({ message: `Horario recargado: ${reservations.length} reservas.`, count: reservations.length });
+});
+
 app.get('*', (_req, res) => res.sendFile(join(__dirname, 'public', 'index.html')));
 
 // Servidor tradicional (local, Render, Railway…). En Vercel se usa la exportación de abajo.

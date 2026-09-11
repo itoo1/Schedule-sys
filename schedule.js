@@ -30,8 +30,8 @@ const WEEKLY = {
     { start: '18:15', end: '19:45', course: 'Análisis de Inversiones 1', ...CSM },
   ],
   2: [
-    { start: '13:15', end: '14:45', course: 'Análisis de Inversiones 2', ...CSM },
-    { start: '18:15', end: '19:45', course: 'Análisis de Inversiones 1', ...CSM },
+    { start: '13:15', end: '14:45', course: 'Análisis de Inversiones 1', ...CSM },
+    { start: '18:15', end: '19:45', course: 'Análisis de Inversiones 2', ...CSM },
   ],
   3: [
     { start: '10:15', end: '11:45', course: 'Certificación Bloomberg', name: 'Bastián Bizama', email: 'bbizama2023@udec.cl' },
