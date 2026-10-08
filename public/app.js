@@ -43,6 +43,7 @@ function toMin(hhmm) { const [h, m] = hhmm.split(':').map(Number); return h * 60
 function minToHHMM(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`; }
 function sameYMD(a, b) { return ymd(a) === ymd(b); }
 function isToday(d) { return sameYMD(d, new Date()); }
+function isAdmin() { return Boolean(state.admin.token); }
 function isMobile() { return window.matchMedia('(max-width: 640px)').matches; }
 function snapToOpenDay(d, dir = 1) {
   const open = state.config?.openDays || [1, 2, 3, 4, 5];
@@ -63,10 +64,11 @@ function courseColor(course) {
 }
 
 /* ---------------------------------------------------------------- api */
-async function api(path, opts) {
+async function api(path, opts = {}) {
   const res = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    // Se combinan (no se reemplazan) los headers para conservar siempre el Content-Type.
+    headers: { 'Content-Type': 'application/json', ...(opts.headers || {}) },
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw Object.assign(new Error('request failed'), { data, status: res.status });
@@ -173,7 +175,11 @@ function renderSidebar() {
     <li><span>Aprobación</span><span>${c.requireApproval ? 'requerida' : 'automática'}</span></li>
   `;
 
-  if (c.minAdvanceDays > 0 || c.requireApproval) {
+  if (isAdmin()) {
+    document.getElementById('topbarNoteText').innerHTML =
+      '<strong>Modo administrador</strong> · puedes reservar sin anticipación mínima · tus reservas quedan aprobadas de inmediato';
+    document.getElementById('topbarNote').hidden = false;
+  } else if (c.minAdvanceDays > 0 || c.requireApproval) {
     const parts = [];
     if (c.minAdvanceDays > 0) parts.push(`Reserva con <strong>${c.minAdvanceDays}+ días</strong> de anticipación`);
     if (c.requireApproval) parts.push('las reservas quedan <strong>pendientes de aprobación</strong>, verifica que esté aprobada');
@@ -508,6 +514,8 @@ function readDateParts() {
   return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
+function reserveBtnLabel() { return isAdmin() ? 'Crear reserva (admin)' : 'Confirmar reserva'; }
+
 function openReserve(prefill = {}) {
   const form = document.getElementById('reserveForm');
   form.reset();
@@ -516,22 +524,30 @@ function openReserve(prefill = {}) {
   fillTimeOptions();
 
   const cfg = state.config;
+  const admin = isAdmin();
+  // El administrador autenticado no tiene la restricción de anticipación mínima.
+  const minDays = admin ? 0 : (cfg.minAdvanceDays || 0);
   const rawEarliest = new Date();
-  rawEarliest.setDate(rawEarliest.getDate() + (cfg.minAdvanceDays || 0));
+  rawEarliest.setDate(rawEarliest.getDate() + minDays);
   const earliest = snapToOpenDay(rawEarliest);
   const earliestStr = ymd(earliest);
 
   // Aviso visible con las reglas de reserva.
   const noteParts = [];
-  if (cfg.minAdvanceDays > 0) {
-    noteParts.push(`Las reservas se solicitan con al menos <strong>${cfg.minAdvanceDays} días</strong> de anticipación (desde el ${fmtLongDate(earliestStr)}).`);
-  }
-  if (cfg.requireApproval) {
-    noteParts.push('Las reservas quedan <strong>pendientes de aprobación</strong>: el encargado del laboratorio debe aprobarla antes de que el bloque quede reservado. Verifica que esté aprobada.');
+  if (admin) {
+    noteParts.push('<strong>Modo administrador:</strong> puedes reservar sin anticipación mínima y la reserva queda <strong>aprobada de inmediato</strong>.');
+  } else {
+    if (cfg.minAdvanceDays > 0) {
+      noteParts.push(`Las reservas se solicitan con al menos <strong>${cfg.minAdvanceDays} días</strong> de anticipación (desde el ${fmtLongDate(earliestStr)}).`);
+    }
+    if (cfg.requireApproval) {
+      noteParts.push('Las reservas quedan <strong>pendientes de aprobación</strong>: el encargado del laboratorio debe aprobarla antes de que el bloque quede reservado. Verifica que esté aprobada.');
+    }
   }
   const noteEl = document.getElementById('reserveNote');
   document.getElementById('reserveNoteText').innerHTML = noteParts.join(' ');
   noteEl.hidden = noteParts.length === 0;
+  document.getElementById('submitReserve').textContent = reserveBtnLabel();
 
   const base = state.anchor > earliest ? state.anchor : earliest;
   let wanted = prefill.date && prefill.date >= earliestStr ? prefill.date : ymd(snapToOpenDay(base));
@@ -556,13 +572,16 @@ async function submitReserve(e) {
   btn.disabled = true;
   btn.textContent = 'Enviando…';
   try {
-    const res = await api('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
+    // Con sesión de administrador se usa el endpoint protegido (sin anticipación mínima, queda aprobada).
+    const res = isAdmin()
+      ? await adminApi('/api/admin/reservations', { method: 'POST', body: JSON.stringify(payload) })
+      : await api('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
     hideModal('reserveModal');
     const pending = res.status === 'pending';
     document.getElementById('successTitle').textContent = pending ? 'Solicitud enviada' : 'Reserva confirmada';
     document.getElementById('successMsg').textContent = pending
       ? 'Tu reserva quedó pendiente de aprobación. Guarda este código para consultar su estado (verifica que esté aprobada) o cancelarla.'
-      : 'Guarda este código para cancelar tu reserva.';
+      : 'Guarda este código para cancelar la reserva.';
     document.getElementById('successCode').textContent = res.code;
     showModal('successModal');
     toast(pending ? 'Solicitud enviada, pendiente de aprobación' : 'Reserva confirmada', 'success');
@@ -573,7 +592,7 @@ async function submitReserve(e) {
     msg.hidden = false;
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Confirmar reserva';
+    btn.textContent = reserveBtnLabel();
   }
 }
 

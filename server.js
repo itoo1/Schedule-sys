@@ -141,7 +141,8 @@ function makeCode() {
   return code;
 }
 
-function validateReservation(body) {
+// isAdmin: el administrador autenticado puede reservar sin la anticipación mínima.
+function validateReservation(body, { isAdmin = false } = {}) {
   const errors = [];
   const name = String(body.name || '').trim();
   const email = String(body.email || '').trim();
@@ -184,7 +185,7 @@ function validateReservation(body) {
   const todayStr = now.toISOString().slice(0, 10);
   if (date < todayStr) errors.push('No se pueden crear reservas en fechas pasadas.');
 
-  if (LAB_CONFIG.minAdvanceDays > 0) {
+  if (!isAdmin && LAB_CONFIG.minAdvanceDays > 0) {
     const minDate = new Date(now);
     minDate.setUTCDate(minDate.getUTCDate() + LAB_CONFIG.minAdvanceDays);
     const minStr = minDate.toISOString().slice(0, 10);
@@ -367,11 +368,15 @@ app.post('/api/admin/reservations/:id/reject', requireAdmin, async (req, res) =>
   res.json(updated);
 });
 
+// Reserva creada por el administrador: sin anticipación mínima y aprobada de inmediato.
+// Solo accesible con sesión de administrador válida (el endpoint público sigue exigiendo la anticipación).
 app.post('/api/admin/reservations', requireAdmin, async (req, res) => {
-  const { errors, value } = validateReservation(req.body || {});
+  const { errors, value } = validateReservation(req.body || {}, { isAdmin: true });
   if (errors) return res.status(400).json({ errors });
-  if (await hasConflict({ ...value, statuses: ['approved'] })) {
-    return res.status(409).json({ errors: ['Choca con una reserva ya aprobada.'] });
+  if (await hasConflict(value)) {
+    return res.status(409).json({
+      errors: ['Ese bloque ya está reservado o tiene una solicitud pendiente. Apruébala o recházala primero, o elige otro horario.'],
+    });
   }
   const reservation = {
     id: randomUUID(),
