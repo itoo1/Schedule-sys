@@ -117,6 +117,15 @@ export async function removeReservation(id) {
   return true;
 }
 
+/** Elimina todas las reservas que cumplan el predicado. Devuelve cuántas se borraron. */
+export async function removeReservationsWhere(predicate) {
+  const list = await readAll();
+  const kept = list.filter((r) => !predicate(r));
+  const removed = list.length - kept.length;
+  if (removed > 0) await writeAll(kept);
+  return removed;
+}
+
 /** Reemplaza TODAS las reservas de una sola vez (usado por el bootstrap del horario). */
 export async function replaceAllReservations(list) {
   await writeAll(list);

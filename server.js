@@ -8,6 +8,7 @@ import {
   addReservation,
   updateReservation,
   removeReservation,
+  removeReservationsWhere,
   replaceAllReservations,
   hasConflict,
   storageBackend,
@@ -176,7 +177,7 @@ function validateReservation(body, { isAdmin = false } = {}) {
   if (s < open || e > close) {
     errors.push(`El horario debe estar entre ${LAB_CONFIG.openHour} y ${LAB_CONFIG.closeHour}.`);
   }
-  if ((e - s) % 30 !== 0) errors.push('Los bloques deben ser múltiplos de 30 minutos.');
+  if (e - s < 15) errors.push('La reserva debe durar al menos 15 minutos.');
   if (e - s > LAB_CONFIG.maxHoursPerReservation * 60) {
     errors.push(`La reserva no puede exceder ${LAB_CONFIG.maxHoursPerReservation} horas.`);
   }
@@ -391,10 +392,25 @@ app.post('/api/admin/reservations', requireAdmin, async (req, res) => {
   res.status(201).json(reservation);
 });
 
+const weekdayOf = (ymd) => new Date(`${ymd}T00:00:00Z`).getUTCDay();
+
+// Elimina una reserva. Con ?scope=series elimina además todas las del semestre que comparten
+// día de la semana, horario, curso y responsable (el bloque que se repite cada semana).
 app.delete('/api/admin/reservations/:id', requireAdmin, async (req, res) => {
-  const ok = await removeReservation(req.params.id);
-  if (!ok) return res.status(404).json({ errors: ['La reserva no existe.'] });
-  res.json({ message: 'Reserva eliminada.' });
+  const target = await getReservationById(req.params.id);
+  if (!target) return res.status(404).json({ errors: ['La reserva no existe.'] });
+
+  if (req.query.scope === 'series') {
+    const dow = weekdayOf(target.date);
+    const removed = await removeReservationsWhere((r) =>
+      weekdayOf(r.date) === dow &&
+      r.start === target.start && r.end === target.end &&
+      r.course === target.course && r.name === target.name);
+    return res.json({ message: `${removed} reservas eliminadas.`, removed });
+  }
+
+  await removeReservation(target.id);
+  res.json({ message: 'Reserva eliminada.', removed: 1 });
 });
 
 // Vuelve a cargar el horario fijo del semestre (definido en schedule.js),

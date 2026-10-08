@@ -13,6 +13,8 @@ const state = {
     open: false,
     tab: 'pending',
     list: [],
+    month: null,
+    day: null,
   },
 };
 
@@ -459,32 +461,32 @@ function renderYear(root) {
 }
 
 /* ---------------------------------------------------------------- reserve modal */
-function fillTimeOptions() {
-  const c = state.config;
-  const open = toMin(c.openHour);
-  const close = toMin(c.closeHour);
-  const startSel = document.getElementById('startSelect');
-  const endSel = document.getElementById('endSelect');
-  startSel.innerHTML = '';
-  for (let m = open; m < close; m += 30) {
-    startSel.appendChild(new Option(minToHHMM(m), minToHHMM(m)));
-  }
-  updateEndOptions();
-  startSel.onchange = updateEndOptions;
+// Horas escritas a mano (24 h): se formatean como hh:mm mientras se escribe.
+function normalizeTime(raw) {
+  const d = String(raw || '').replace(/\D/g, '').slice(0, 4);
+  if (!d) return '';
+  if (d.length <= 2) return `${d.padStart(2, '0')}:00`;
+  if (d.length === 3) return `0${d[0]}:${d.slice(1)}`;
+  return `${d.slice(0, 2)}:${d.slice(2)}`;
 }
-function updateEndOptions() {
-  const c = state.config;
-  const close = toMin(c.closeHour);
-  const startSel = document.getElementById('startSelect');
-  const endSel = document.getElementById('endSelect');
-  const s = toMin(startSel.value);
-  const maxEnd = Math.min(close, s + c.maxHoursPerReservation * 60);
-  const prev = endSel.value;
-  endSel.innerHTML = '';
-  for (let m = s + 30; m <= maxEnd; m += 30) {
-    endSel.appendChild(new Option(minToHHMM(m), minToHHMM(m)));
+function isValidTime(t) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(t); }
+
+function bindTimeInputs() {
+  const start = document.getElementById('startInput');
+  const end = document.getElementById('endInput');
+  for (const input of [start, end]) {
+    input.addEventListener('input', () => {
+      const d = input.value.replace(/\D/g, '').slice(0, 4);
+      input.value = d.length > 2 ? `${d.slice(0, 2)}:${d.slice(2)}` : d;
+    });
+    input.addEventListener('blur', () => { input.value = normalizeTime(input.value); });
   }
-  if ([...endSel.options].some((o) => o.value === prev)) endSel.value = prev;
+  // Al terminar de escribir el inicio, sugiere un término 1 hora después (editable).
+  start.addEventListener('blur', () => {
+    if (!isValidTime(start.value) || end.value) return;
+    const close = toMin(state.config.closeHour);
+    end.value = minToHHMM(Math.min(close, toMin(start.value) + 60));
+  });
 }
 
 // Selector de fecha en formato chileno: día / mes / año.
@@ -521,7 +523,6 @@ function openReserve(prefill = {}) {
   form.reset();
   const courseSel = document.getElementById('courseSelect');
   courseSel.innerHTML = state.config.courses.map((c) => `<option>${escapeHtml(c)}</option>`).join('');
-  fillTimeOptions();
 
   const cfg = state.config;
   const admin = isAdmin();
@@ -555,8 +556,10 @@ function openReserve(prefill = {}) {
   fillDateParts(wanted);
   if (prefill.start) {
     form.elements.start.value = prefill.start;
-    updateEndOptions();
+    form.elements.end.value = minToHHMM(Math.min(toMin(cfg.closeHour), toMin(prefill.start) + 60));
   }
+  document.getElementById('timeHelp').textContent =
+    `Horario del laboratorio: ${cfg.openHour}–${cfg.closeHour} (máx. ${cfg.maxHoursPerReservation} h por reserva). Puedes escribir cualquier hora, por ejemplo 11:15 a 12:45.`;
   document.getElementById('reserveMsg').hidden = true;
   showModal('reserveModal');
   form.elements.name.focus();
@@ -569,6 +572,13 @@ async function submitReserve(e) {
   const msg = document.getElementById('reserveMsg');
   const payload = Object.fromEntries(new FormData(form).entries());
   payload.date = readDateParts();
+  payload.start = normalizeTime(payload.start);
+  payload.end = normalizeTime(payload.end);
+  if (!isValidTime(payload.start) || !isValidTime(payload.end)) {
+    msg.innerHTML = '<ul><li>Escribe las horas en formato hh:mm (24 horas), por ejemplo 11:15.</li></ul>';
+    msg.hidden = false;
+    return;
+  }
   btn.disabled = true;
   btn.textContent = 'Enviando…';
   try {
@@ -586,6 +596,7 @@ async function submitReserve(e) {
     showModal('successModal');
     toast(pending ? 'Solicitud enviada, pendiente de aprobación' : 'Reserva confirmada', 'success');
     await refresh();
+    if (isAdmin()) await loadAdminList();
   } catch (err) {
     const errors = err.data?.errors || ['No se pudo crear la reserva.'];
     msg.innerHTML = `<ul>${errors.map((x) => `<li>${escapeHtml(x)}</li>`).join('')}</ul>`;
@@ -749,36 +760,203 @@ async function loadAdminList() {
   }
 }
 
+const DOW_PLURAL = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados'];
+const weekdayOfYmd = (s) => new Date(`${s}T00:00:00Z`).getUTCDay();
+
+// Reservas del mismo bloque semanal (mismo día de la semana, horario, curso y responsable).
+function seriesOf(r) {
+  const dow = weekdayOfYmd(r.date);
+  return state.admin.list
+    .filter((x) => weekdayOfYmd(x.date) === dow && x.start === r.start && x.end === r.end
+      && x.course === r.course && x.name === r.name)
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+async function afterAdminChange() {
+  await Promise.all([loadAdminList(), refresh()]);
+  if (state.admin.day) renderAdminDay();
+}
+
 async function adminAct(id, action, note) {
-  const verb = { approve: 'aprobar', reject: 'rechazar', delete: 'eliminar' }[action];
-  if (action === 'delete' && !confirm('¿Eliminar esta reserva de forma permanente?')) return;
+  const verb = { approve: 'aprobar', reject: 'rechazar' }[action];
   try {
-    if (action === 'delete') {
-      await adminApi(`/api/admin/reservations/${id}`, { method: 'DELETE' });
-    } else {
-      await adminApi(`/api/admin/reservations/${id}/${action}`, {
-        method: 'POST',
-        body: JSON.stringify({ note: note || '' }),
-      });
-    }
-    toast(`Reserva ${action === 'approve' ? 'aprobada' : action === 'reject' ? 'rechazada' : 'eliminada'}`, 'success');
-    await Promise.all([loadAdminList(), refresh()]);
+    await adminApi(`/api/admin/reservations/${id}/${action}`, {
+      method: 'POST',
+      body: JSON.stringify({ note: note || '' }),
+    });
+    toast(`Reserva ${action === 'approve' ? 'aprobada' : 'rechazada'}`, 'success');
+    await afterAdminChange();
   } catch (err) {
     toast((err.data?.errors || [`No se pudo ${verb} la reserva.`])[0], 'error');
   }
 }
 
+// Pregunta si se elimina solo esta reserva o todas las del mismo bloque en el semestre.
+function openDeleteDialog(r) {
+  const series = seriesOf(r);
+  const dow = weekdayOfYmd(r.date);
+  const body = document.getElementById('deleteBody');
+  body.innerHTML = `
+    <div class="detail-row"><span>Reserva</span><span>${escapeHtml(r.course)}</span></div>
+    <div class="detail-row"><span>Responsable</span><span>${escapeHtml(r.name)}</span></div>
+    <div class="detail-row"><span>Fecha</span><span>${fmtLongDate(r.date)}</span></div>
+    <div class="detail-row"><span>Horario</span><span>${r.start} – ${r.end}</span></div>
+    <p class="muted" style="margin-top:6px">¿Qué quieres eliminar?</p>
+    <div class="del-options"></div>`;
+  const opts = body.querySelector('.del-options');
+
+  const one = el('button', 'del-opt');
+  one.innerHTML = `<strong>Solo esta reserva</strong><span>${fmtLongDate(r.date)}</span>`;
+  one.addEventListener('click', () => deleteReservation(r.id, 'one'));
+  opts.appendChild(one);
+
+  if (series.length > 1) {
+    const all = el('button', 'del-opt is-danger');
+    all.innerHTML = `<strong>Todas las del semestre en este horario</strong>
+      <span>${series.length} reservas · todos los ${DOW_PLURAL[dow]} ${r.start}–${r.end}<br>
+      ${fmtShortDate(series[0].date)} → ${fmtShortDate(series[series.length - 1].date)}</span>`;
+    all.addEventListener('click', () => deleteReservation(r.id, 'series'));
+    opts.appendChild(all);
+  }
+
+  const cancel = el('button', 'btn btn-ghost', 'Cancelar');
+  cancel.addEventListener('click', () => hideModal('deleteModal'));
+  body.appendChild(cancel);
+  showModal('deleteModal');
+}
+
+async function deleteReservation(id, scope) {
+  try {
+    const res = await adminApi(`/api/admin/reservations/${id}${scope === 'series' ? '?scope=series' : ''}`, { method: 'DELETE' });
+    hideModal('deleteModal');
+    toast(res.removed > 1 ? `${res.removed} reservas eliminadas` : 'Reserva eliminada', 'success');
+    await afterAdminChange();
+  } catch (err) {
+    toast((err.data?.errors || ['No se pudo eliminar la reserva.'])[0], 'error');
+  }
+}
+
+/* Fila de una reserva con sus acciones (se usa en Pendientes y en el detalle del día). */
+function adminRow(r) {
+  const status = r.status || 'approved';
+  const dur = (toMin(r.end) - toMin(r.start)) / 60;
+  const row = el('div', 'admin-row' + (status === 'pending' ? ' is-pending' : ''));
+  row.style.setProperty('--ev', courseColor(r.course));
+  row.innerHTML = `
+    <div class="admin-when">${fmtShortDate(r.date)}<small>${r.start}–${r.end} · ${Math.round(dur * 100) / 100} h</small></div>
+    <div class="admin-what">
+      <div class="who">${escapeHtml(r.course)}</div>
+      <div class="sub">${escapeHtml(r.name)} · <a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>${r.purpose ? ' · ' + escapeHtml(r.purpose) : ''}</div>
+    </div>
+    <div><span class="admin-status st-${status}">${STATUS_LABEL[status]}</span></div>
+    <div class="admin-actions"></div>
+    ${r.notes ? `<div class="admin-note">Nota: ${escapeHtml(r.notes)}</div>` : ''}
+    ${r.decisionNote ? `<div class="admin-note">Decisión: ${escapeHtml(r.decisionNote)}</div>` : ''}
+  `;
+  const actions = row.querySelector('.admin-actions');
+  if (status === 'pending') {
+    const ok = el('button', 'btn btn-ok', 'Aprobar');
+    ok.addEventListener('click', () => adminAct(r.id, 'approve'));
+    const no = el('button', 'btn btn-no', 'Rechazar');
+    no.addEventListener('click', () => {
+      const note = prompt('Motivo del rechazo (opcional):', '');
+      if (note !== null) adminAct(r.id, 'reject', note);
+    });
+    actions.append(ok, no);
+  }
+  const del = el('button', 'btn btn-no', 'Eliminar');
+  del.addEventListener('click', () => openDeleteDialog(r));
+  actions.appendChild(del);
+  return row;
+}
+
+/* Reservas de un día (modal), con eliminar / aprobar / rechazar y botón para reservar ese día. */
+function openAdminDay(dateStr) {
+  state.admin.day = dateStr;
+  renderAdminDay();
+  showModal('adminDayModal');
+}
+
+function renderAdminDay() {
+  const date = state.admin.day;
+  const body = document.getElementById('adminDayBody');
+  document.getElementById('adminDayTitle').textContent = fmtLongDate(date);
+  const items = state.admin.list
+    .filter((r) => r.date === date && (r.status || 'approved') !== 'rejected')
+    .sort((a, b) => a.start.localeCompare(b.start));
+
+  body.innerHTML = '';
+  if (!items.length) body.appendChild(el('div', 'empty-state', 'No hay reservas este día.'));
+  const list = el('div', 'admin-table');
+  items.forEach((r) => list.appendChild(adminRow(r)));
+  body.appendChild(list);
+
+  const open = state.config.openDays.includes(weekdayOfYmd(date));
+  if (open) {
+    const add = el('button', 'btn btn-primary', '+ Reservar este día');
+    add.addEventListener('click', () => {
+      hideModal('adminDayModal');
+      state.admin.day = null;
+      openReserve({ date });
+    });
+    body.appendChild(add);
+  }
+}
+
+/* Calendario mensual del administrador: clic en un día para ver y eliminar sus reservas. */
+function renderAdminCalendar(wrap) {
+  if (!state.admin.month) state.admin.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+  const base = state.admin.month;
+  const y = base.getFullYear();
+  const m = base.getMonth();
+
+  const nav = el('div', 'acal-nav');
+  const prev = el('button', 'icon-btn', '‹');
+  const next = el('button', 'icon-btn', '›');
+  const today = el('button', 'btn btn-ghost', 'Hoy');
+  const title = el('h3', '', `${MESES[m]} ${y}`);
+  prev.addEventListener('click', () => { state.admin.month = new Date(y, m - 1, 1); render(); });
+  next.addEventListener('click', () => { state.admin.month = new Date(y, m + 1, 1); render(); });
+  today.addEventListener('click', () => { state.admin.month = new Date(new Date().getFullYear(), new Date().getMonth(), 1); render(); });
+  nav.append(prev, today, next, title);
+  wrap.appendChild(nav);
+
+  const byDate = {};
+  for (const r of state.admin.list) {
+    if ((r.status || 'approved') === 'rejected') continue;
+    (byDate[r.date] ||= []).push(r);
+  }
+
+  const grid = el('div', 'month-grid');
+  for (let i = 1; i <= 7; i++) grid.appendChild(el('div', 'mg-dow', DOW_SHORT[i % 7]));
+  const gridStart = mondayOf(new Date(y, m, 1));
+  for (let i = 0; i < 42; i++) {
+    const d = addDays(gridStart, i);
+    const key = ymd(d);
+    const closed = !state.config.openDays.includes(d.getDay());
+    const cell = el('div', 'mg-day'
+      + (d.getMonth() === m ? '' : ' is-out')
+      + (closed ? ' is-closed' : '')
+      + (isToday(d) ? ' is-today' : ''));
+    cell.appendChild(el('div', 'mg-daynum', String(d.getDate())));
+    const items = (byDate[key] || []).sort((a, b) => a.start.localeCompare(b.start));
+    items.slice(0, 3).forEach((r) => {
+      const chip = el('div', 'mg-chip' + (r.status === 'pending' ? ' is-pending' : ''), `${r.start} ${r.course}`);
+      chip.style.setProperty('--ev', courseColor(r.course));
+      cell.appendChild(chip);
+    });
+    if (items.length > 3) cell.appendChild(el('div', 'mg-more', `+${items.length - 3} más`));
+    cell.addEventListener('click', () => openAdminDay(key));
+    grid.appendChild(cell);
+  }
+  wrap.appendChild(grid);
+  wrap.appendChild(el('p', 'muted acal-hint', 'Haz clic en un día para ver sus reservas, eliminarlas (solo esa fecha o todas las del semestre en ese horario) o crear una nueva.'));
+}
+
 function renderAdmin(root) {
   const list = state.admin.list;
-  const counts = {
-    pending: list.filter((r) => r.status === 'pending').length,
-    approved: list.filter((r) => (r.status || 'approved') === 'approved').length,
-    all: list.length,
-  };
-  const tab = state.admin.tab;
-  const shown = list
-    .filter((r) => (tab === 'all' ? true : (r.status || 'approved') === tab))
-    .filter(matchesFilter);
+  const pending = list.filter((r) => r.status === 'pending');
+  const tab = state.admin.tab === 'pending' ? 'pending' : 'calendar';
 
   const wrap = el('div', 'admin');
 
@@ -786,14 +964,13 @@ function renderAdmin(root) {
   head.innerHTML = `
     <div>
       <h2>Reservas del laboratorio</h2>
-      <span class="muted">Aprueba, rechaza o elimina solicitudes. Los cambios se reflejan de inmediato en el calendario.</span>
+      <span class="muted">Aprueba solicitudes y administra el calendario. Los cambios se reflejan de inmediato.</span>
     </div>
     <div class="admin-tabs">
       <button class="admin-tab ${tab === 'pending' ? 'is-active' : ''}" data-tab="pending">
-        Pendientes${counts.pending ? `<span class="n">${counts.pending}</span>` : ''}
+        Pendientes${pending.length ? `<span class="n">${pending.length}</span>` : ''}
       </button>
-      <button class="admin-tab ${tab === 'approved' ? 'is-active' : ''}" data-tab="approved">Aprobadas</button>
-      <button class="admin-tab ${tab === 'all' ? 'is-active' : ''}" data-tab="all">Todas</button>
+      <button class="admin-tab ${tab === 'calendar' ? 'is-active' : ''}" data-tab="calendar">Calendario</button>
     </div>`;
   head.querySelectorAll('.admin-tab').forEach((b) =>
     b.addEventListener('click', () => { state.admin.tab = b.dataset.tab; render(); }));
@@ -813,48 +990,18 @@ function renderAdmin(root) {
   bar.appendChild(outBtn);
   wrap.appendChild(bar);
 
-  if (!shown.length) {
-    wrap.appendChild(el('div', 'empty-state', tab === 'pending'
-      ? 'No hay solicitudes pendientes. Todo al día.'
-      : 'Sin reservas en esta vista.'));
-    root.appendChild(wrap);
-    return;
-  }
-
-  const table = el('div', 'admin-table');
-  for (const r of shown) {
-    const status = r.status || 'approved';
-    const dur = (toMin(r.end) - toMin(r.start)) / 60;
-    const row = el('div', 'admin-row' + (status === 'pending' ? ' is-pending' : ''));
-    row.style.setProperty('--ev', courseColor(r.course));
-    row.innerHTML = `
-      <div class="admin-when">${fmtShortDate(r.date)}<small>${r.start}–${r.end} · ${dur} h</small></div>
-      <div class="admin-what">
-        <div class="who">${escapeHtml(r.course)}</div>
-        <div class="sub">${escapeHtml(r.name)} · <a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>${r.purpose ? ' · ' + escapeHtml(r.purpose) : ''}</div>
-      </div>
-      <div><span class="admin-status st-${status}">${STATUS_LABEL[status]}</span></div>
-      <div class="admin-actions"></div>
-      ${r.notes ? `<div class="admin-note">Nota: ${escapeHtml(r.notes)}</div>` : ''}
-      ${r.decisionNote ? `<div class="admin-note">Decisión: ${escapeHtml(r.decisionNote)}</div>` : ''}
-    `;
-    const actions = row.querySelector('.admin-actions');
-    if (status === 'pending') {
-      const ok = el('button', 'btn btn-ok', 'Aprobar');
-      ok.addEventListener('click', () => adminAct(r.id, 'approve'));
-      const no = el('button', 'btn btn-no', 'Rechazar');
-      no.addEventListener('click', () => {
-        const note = prompt('Motivo del rechazo (opcional):', '');
-        if (note !== null) adminAct(r.id, 'reject', note);
-      });
-      actions.append(ok, no);
+  if (tab === 'calendar') {
+    renderAdminCalendar(wrap);
+  } else {
+    const shown = pending.filter(matchesFilter);
+    if (!shown.length) {
+      wrap.appendChild(el('div', 'empty-state', 'No hay solicitudes pendientes. Todo al día.'));
+    } else {
+      const table = el('div', 'admin-table');
+      shown.forEach((r) => table.appendChild(adminRow(r)));
+      wrap.appendChild(table);
     }
-    const del = el('button', 'btn btn-no', 'Eliminar');
-    del.addEventListener('click', () => adminAct(r.id, 'delete'));
-    actions.appendChild(del);
-    table.appendChild(row);
   }
-  wrap.appendChild(table);
   root.appendChild(wrap);
 }
 
@@ -884,6 +1031,7 @@ function bindUI() {
   document.getElementById('nextBtn').addEventListener('click', () => step(1));
   document.getElementById('todayBtn').addEventListener('click', () => { state.anchor = startOfDay(new Date()); refresh(); });
   document.getElementById('reserveForm').addEventListener('submit', submitReserve);
+  bindTimeInputs();
 
   // Re-render al cruzar el breakpoint móvil (semana ↔ día, grillas, etc.)
   let wasMobile = isMobile();

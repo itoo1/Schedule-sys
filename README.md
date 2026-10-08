@@ -16,6 +16,12 @@ tipo terminal financiera.
   horario en firme hasta que un administrador la aprueba. Panel en `/admin` (o el ícono
   ⚿) con pestañas Pendientes / Aprobadas / Todas y acciones aprobar · rechazar · eliminar.
   Un bloque pendiente aparece rayado en el calendario hasta que se resuelve.
+- **Horas escritas a mano**: inicio y término se escriben en formato 24 h (por ejemplo
+  11:15 a 12:45); duración mínima de 15 minutos y máximo `maxHoursPerReservation`.
+- **Panel de administración como calendario**: pestaña *Calendario* mensual; al hacer clic
+  en un día se ven sus reservas y se pueden eliminar eligiendo entre *solo esta reserva* o
+  *todas las del semestre en ese horario* (mismo día de la semana, horario, curso y responsable).
+  El administrador también puede crear reservas sin la anticipación mínima.
 - **Código de cancelación**: cada reserva entrega un código de 6 caracteres necesario
   para cancelarla o consultar su estado.
 - **Filtro** por curso, nombre o motivo, y panel de estadísticas del periodo
@@ -120,7 +126,7 @@ tras 15 min de inactividad.
 | `GET` | `/api/admin/reservations?status=` | Listado completo (Bearer token) |
 | `POST` | `/api/admin/reservations/:id/approve` | Aprobar |
 | `POST` | `/api/admin/reservations/:id/reject` | Rechazar (`{ note }` opcional) |
-| `DELETE` | `/api/admin/reservations/:id` | Eliminar de forma permanente |
+| `DELETE` | `/api/admin/reservations/:id[?scope=series]` | Eliminar una reserva; con `scope=series`, todas las del mismo bloque semanal |
 
 Para operar sin aprobación (reservas confirmadas al instante), pon
 `requireApproval: false` en `LAB_CONFIG`.

@@ -706,6 +706,37 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
 .pill.is-pending { border-color: var(--amber); color: var(--amber); }
 .pill.is-pending strong { color: var(--amber); }
 
+/* calendario del administrador */
+.acal-nav { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+.acal-nav h3 { margin-left: 8px; font-size: 16px; text-transform: capitalize; }
+.acal-hint { margin-top: 12px; font-size: 12px; }
+.admin .mg-day { min-height: 92px; }
+
+/* detalle de un día (admin) */
+#adminDayModal .admin-row { grid-template-columns: 104px 1fr; }
+#adminDayModal .admin-actions { flex-wrap: wrap; }
+#adminDayModal .btn-primary { align-self: flex-start; }
+
+/* eliminar: una reserva o toda la serie */
+.del-options { display: flex; flex-direction: column; gap: 10px; }
+.del-opt {
+  text-align: left;
+  display: flex; flex-direction: column; gap: 4px;
+  padding: 12px 14px;
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 13px;
+  transition: border-color 0.15s, background 0.15s;
+}
+.del-opt span { color: var(--text-mute); font-size: 12px; line-height: 1.45; }
+.del-opt:hover { border-color: var(--accent-line); background: var(--accent-soft); }
+.del-opt.is-danger:hover { border-color: var(--red); background: rgba(255, 92, 108, 0.1); }
+.del-opt.is-danger strong { color: var(--red); }
+
+.field-help { font-size: 11.5px; color: var(--text-mute); margin-top: -6px; }
+
 @media (max-width: 720px) {
   .admin-row { grid-template-columns: 1fr; }
   .admin-actions { justify-self: start; }

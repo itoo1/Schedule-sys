@@ -136,14 +136,19 @@
         </div>
         <div class="field-row">
           <label class="field">
-            <span>Inicio</span>
-            <select name="start" id="startSelect" required></select>
+            <span>Hora de inicio <em class="field-hint">(24 h, ej. 11:15)</em></span>
+            <input name="start" id="startInput" type="text" inputmode="numeric" autocomplete="off"
+                   placeholder="hh:mm" maxlength="5" required pattern="([01]\d|2[0-3]):[0-5]\d"
+                   title="Formato hh:mm en 24 horas, por ejemplo 11:15" />
           </label>
           <label class="field">
-            <span>Término</span>
-            <select name="end" id="endSelect" required></select>
+            <span>Hora de término <em class="field-hint">(ej. 12:45)</em></span>
+            <input name="end" id="endInput" type="text" inputmode="numeric" autocomplete="off"
+                   placeholder="hh:mm" maxlength="5" required pattern="([01]\d|2[0-3]):[0-5]\d"
+                   title="Formato hh:mm en 24 horas, por ejemplo 12:45" />
           </label>
         </div>
+        <p class="field-help" id="timeHelp"></p>
         <label class="field">
           <span>Notas para el encargado (opcional)</span>
           <textarea name="notes" rows="2" placeholder="Requiero acceso a 4 terminales / datos de renta fija…"></textarea>
@@ -167,6 +172,28 @@
         <button class="icon-btn" data-close aria-label="Cerrar">×</button>
       </div>
       <div class="modal-body" id="detailBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal (admin): reservas de un día -->
+  <div class="modal-backdrop" id="adminDayModal" hidden>
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2 id="adminDayTitle">Reservas del día</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="adminDayBody"></div>
+    </div>
+  </div>
+
+  <!-- Modal (admin): ¿eliminar solo esta o toda la serie? -->
+  <div class="modal-backdrop" id="deleteModal" hidden>
+    <div class="modal modal-sm" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <h2>Eliminar reserva</h2>
+        <button class="icon-btn" data-close aria-label="Cerrar">×</button>
+      </div>
+      <div class="modal-body" id="deleteBody"></div>
     </div>
   </div>
 
