@@ -6,7 +6,10 @@ import {
   getReservations,
   getReservationById,
   addReservation,
+  addReservations,
   updateReservation,
+  updateReservationsWhere,
+  findConflictingDates,
   removeReservation,
   removeReservationsWhere,
   replaceAllReservations,
@@ -66,6 +69,7 @@ const LAB_CONFIG = {
   terminals: 15,
   maxHoursPerReservation: 4,
   minAdvanceDays: 7, // anticipación mínima para solicitar una reserva
+  maxRecurringWeeks: 20, // máximo de semanas que se pueden reservar de una sola vez
   requireApproval: true, // las reservas quedan pendientes hasta que un administrador las aprueba
   courses: [
     'Valoración de Empresas',
@@ -205,6 +209,62 @@ function validateReservation(body, { isAdmin = false } = {}) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Reservas recurrentes: el mismo día y horario durante N semanas seguidas
+// ---------------------------------------------------------------------------
+function parseWeeks(body) {
+  const raw = body.weeks === undefined || body.weeks === '' ? 1 : Number(body.weeks);
+  if (!Number.isInteger(raw) || raw < 1 || raw > LAB_CONFIG.maxRecurringWeeks) {
+    return { error: `Las semanas deben ser un número entre 1 y ${LAB_CONFIG.maxRecurringWeeks}.` };
+  }
+  return { weeks: raw };
+}
+
+function addDaysYmd(ymd, n) {
+  const d = new Date(`${ymd}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
+
+const fmtChile = (ymd) => ymd.split('-').reverse().join('/'); // dd/mm/aaaa
+
+/**
+ * Crea la reserva (o la serie semanal) de forma atómica: si alguna semana choca con otra
+ * reserva no se crea ninguna y se informan las fechas en conflicto.
+ */
+async function createReservations(value, weeks, { status, decisionNote = '' }) {
+  const slots = Array.from({ length: weeks }, (_, i) => ({
+    date: addDaysYmd(value.date, 7 * i), start: value.start, end: value.end,
+  }));
+
+  const conflicts = await findConflictingDates(slots);
+  if (conflicts.length) {
+    return {
+      conflict: weeks === 1
+        ? 'Ese bloque ya está reservado o tiene una solicitud pendiente. Elige otro horario.'
+        : `Hay conflicto de horario en: ${conflicts.map(fmtChile).join(', ')}. ` +
+          'Elige menos semanas u otro horario (no se creó ninguna reserva).',
+    };
+  }
+
+  const now = new Date().toISOString();
+  const code = makeCode();                 // un solo código para toda la serie
+  const seriesId = weeks > 1 ? randomUUID() : null;
+  const items = slots.map((slot, i) => ({
+    id: randomUUID(),
+    code,
+    ...value,
+    date: slot.date,
+    status,
+    createdAt: now,
+    decidedAt: status === 'approved' ? now : null,
+    decisionNote,
+    ...(seriesId ? { seriesId, seriesIndex: i + 1, seriesTotal: weeks } : {}),
+  }));
+  await addReservations(items);
+  return { items, code };
+}
+
 const publicView = (r) => ({
   id: r.id,
   name: r.name,
@@ -214,6 +274,8 @@ const publicView = (r) => ({
   start: r.start,
   end: r.end,
   status: r.status || 'approved',
+  week: r.seriesIndex || 1,
+  weeks: r.seriesTotal || 1,
 });
 
 // ---------------------------------------------------------------------------
@@ -262,31 +324,24 @@ app.get('/api/stats', async (req, res) => {
 });
 
 app.post('/api/reservations', async (req, res) => {
-  const { errors, value } = validateReservation(req.body || {});
-  if (errors) return res.status(400).json({ errors });
-
-  if (await hasConflict(value)) {
-    return res.status(409).json({
-      errors: ['Ese bloque ya está reservado o tiene una solicitud pendiente. Elige otro horario.'],
-    });
-  }
+  const body = req.body || {};
+  const { errors, value } = validateReservation(body);
+  const w = parseWeeks(body);
+  if (w.error) (errors || []).push(w.error);
+  if (errors || w.error) return res.status(400).json({ errors: errors || [w.error] });
 
   const status = LAB_CONFIG.requireApproval ? 'pending' : 'approved';
-  const reservation = {
-    id: randomUUID(),
-    code: makeCode(),
-    ...value,
-    status,
-    createdAt: new Date().toISOString(),
-    decidedAt: status === 'approved' ? new Date().toISOString() : null,
-    decisionNote: '',
-  };
-  await addReservation(reservation);
+  const result = await createReservations(value, w.weeks, { status });
+  if (result.conflict) return res.status(409).json({ errors: [result.conflict] });
 
+  const { items, code } = result;
   res.status(201).json({
-    id: reservation.id,
-    code: reservation.code,
+    id: items[0].id,
+    code,
     status,
+    count: items.length,
+    firstDate: items[0].date,
+    lastDate: items[items.length - 1].date,
     message: status === 'pending'
       ? 'Solicitud enviada. Un administrador debe aprobarla. Guarda el código para consultarla o cancelarla.'
       : 'Reserva confirmada. Guarda el código para cancelarla.',
@@ -310,8 +365,14 @@ app.post('/api/reservations/:id/cancel', async (req, res) => {
     return res.status(403).json({ errors: ['Código de cancelación incorrecto.'] });
   }
 
+  // scope "series": cancela todas las semanas que se reservaron juntas.
+  if (req.body?.scope === 'series' && reservation.seriesId) {
+    const removed = await removeReservationsWhere((r) => r.seriesId === reservation.seriesId && r.code === code);
+    return res.json({ message: `${removed} reservas canceladas.`, removed });
+  }
+
   await removeReservation(reservation.id);
-  res.json({ message: 'Reserva cancelada.' });
+  res.json({ message: 'Reserva cancelada.', removed: 1 });
 });
 
 // ---------------------------------------------------------------------------
@@ -342,54 +403,61 @@ app.get('/api/admin/reservations', requireAdmin, async (req, res) => {
   res.json(list);
 });
 
+// Reservas sobre las que actúa aprobar/rechazar: solo la indicada o, con ?scope=series,
+// todas las pendientes que se solicitaron juntas (misma serie semanal).
+const targetsOf = (target, scope) => (r) =>
+  r.id === target.id ||
+  (scope === 'series' && target.seriesId && r.seriesId === target.seriesId && r.status === 'pending');
+
 app.post('/api/admin/reservations/:id/approve', requireAdmin, async (req, res) => {
   const r = await getReservationById(req.params.id);
   if (!r) return res.status(404).json({ errors: ['La reserva no existe.'] });
+  const pick = targetsOf(r, req.query.scope);
 
-  // Verificar que no choque con otra reserva ya aprobada
-  if (await hasConflict({ ...r, ignoreId: r.id, statuses: ['approved'] })) {
-    return res.status(409).json({ errors: ['Choca con otra reserva ya aprobada en ese horario.'] });
+  // Verificar que ninguna choque con otra reserva ya aprobada
+  const all = (await getReservations()).filter(pick);
+  const conflicts = await findConflictingDates(all, { statuses: ['approved'], ignoreIds: all.map((x) => x.id) });
+  if (conflicts.length) {
+    return res.status(409).json({
+      errors: [`Choca con otra reserva ya aprobada el ${conflicts.map(fmtChile).join(', ')}. No se aprobó ninguna.`],
+    });
   }
-  const updated = await updateReservation(r.id, {
+  const updated = await updateReservationsWhere(pick, {
     status: 'approved',
     decidedAt: new Date().toISOString(),
     decisionNote: String(req.body?.note || '').slice(0, 300),
   });
-  res.json(updated);
+  res.json({ updated: updated.length, reservation: updated.find((x) => x.id === r.id) });
 });
 
 app.post('/api/admin/reservations/:id/reject', requireAdmin, async (req, res) => {
   const r = await getReservationById(req.params.id);
   if (!r) return res.status(404).json({ errors: ['La reserva no existe.'] });
-  const updated = await updateReservation(r.id, {
+  const updated = await updateReservationsWhere(targetsOf(r, req.query.scope), {
     status: 'rejected',
     decidedAt: new Date().toISOString(),
     decisionNote: String(req.body?.note || '').slice(0, 300),
   });
-  res.json(updated);
+  res.json({ updated: updated.length, reservation: updated.find((x) => x.id === r.id) });
 });
 
-// Reserva creada por el administrador: sin anticipación mínima y aprobada de inmediato.
-// Solo accesible con sesión de administrador válida (el endpoint público sigue exigiendo la anticipación).
 app.post('/api/admin/reservations', requireAdmin, async (req, res) => {
-  const { errors, value } = validateReservation(req.body || {}, { isAdmin: true });
-  if (errors) return res.status(400).json({ errors });
-  if (await hasConflict(value)) {
+  const body = req.body || {};
+  const { errors, value } = validateReservation(body, { isAdmin: true });
+  const w = parseWeeks(body);
+  if (errors || w.error) return res.status(400).json({ errors: [...(errors || []), ...(w.error ? [w.error] : [])] });
+
+  const result = await createReservations(value, w.weeks, { status: 'approved', decisionNote: 'Creada por administrador' });
+  if (result.conflict) {
     return res.status(409).json({
-      errors: ['Ese bloque ya está reservado o tiene una solicitud pendiente. Apruébala o recházala primero, o elige otro horario.'],
+      errors: [result.conflict.replace('Elige menos semanas u otro horario', 'Apruébalas o recházalas primero, o elige otro horario')],
     });
   }
-  const reservation = {
-    id: randomUUID(),
-    code: makeCode(),
-    ...value,
-    status: 'approved',
-    createdAt: new Date().toISOString(),
-    decidedAt: new Date().toISOString(),
-    decisionNote: 'Creada por administrador',
-  };
-  await addReservation(reservation);
-  res.status(201).json(reservation);
+  const { items, code } = result;
+  res.status(201).json({
+    ...items[0], code, count: items.length,
+    firstDate: items[0].date, lastDate: items[items.length - 1].date,
+  });
 });
 
 const weekdayOf = (ymd) => new Date(`${ymd}T00:00:00Z`).getUTCDay();

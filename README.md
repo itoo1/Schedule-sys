@@ -18,6 +18,11 @@ tipo terminal financiera.
   Un bloque pendiente aparece rayado en el calendario hasta que se resuelve.
 - **Horas escritas a mano**: inicio y término se escriben en formato 24 h (por ejemplo
   11:15 a 12:45); duración mínima de 15 minutos y máximo `maxHoursPerReservation`.
+- **Reservas recurrentes**: el formulario pregunta *¿por cuántas semanas?* (1 a
+  `maxRecurringWeeks`, 20 por defecto) y crea el mismo día y horario cada semana de una vez.
+  Si alguna semana choca no se crea ninguna y se listan las fechas en conflicto. Toda la serie
+  comparte un código (se puede cancelar una semana o todas) y el administrador la aprueba o
+  rechaza con un solo clic.
 - **Panel de administración como calendario**: pestaña *Calendario* mensual; al hacer clic
   en un día se ven sus reservas y se pueden eliminar eligiendo entre *solo esta reserva* o
   *todas las del semestre en ese horario* (mismo día de la semana, horario, curso y responsable).

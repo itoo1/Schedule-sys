@@ -99,6 +99,35 @@ export async function addReservation(reservation) {
   return reservation;
 }
 
+/** Agrega varias reservas con una sola lectura/escritura (reservas recurrentes). */
+export async function addReservations(items) {
+  const list = await readAll();
+  list.push(...items);
+  await writeAll(list);
+  return items;
+}
+
+/** Aplica un cambio a todas las reservas que cumplan el predicado. Devuelve las modificadas. */
+export async function updateReservationsWhere(predicate, patch) {
+  const list = await readAll();
+  const changed = list.filter(predicate);
+  changed.forEach((r) => Object.assign(r, patch));
+  if (changed.length) await writeAll(list);
+  return changed;
+}
+
+/** Devuelve las fechas de los candidatos que chocan con reservas existentes. */
+export async function findConflictingDates(candidates, { statuses = ['approved', 'pending'], ignoreIds = [] } = {}) {
+  const list = await readAll();
+  return candidates
+    .filter((c) => list.some((r) =>
+      !ignoreIds.includes(r.id)
+      && r.date === c.date
+      && statuses.includes(r.status || 'approved')
+      && c.start < r.end && c.end > r.start))
+    .map((c) => c.date);
+}
+
 export async function updateReservation(id, patch) {
   const list = await readAll();
   const target = list.find((r) => r.id === id);

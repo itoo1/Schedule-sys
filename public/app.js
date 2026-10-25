@@ -509,6 +509,27 @@ function fillDateParts(targetStr) {
   yearSel.value = ty;
 }
 
+// Vista previa de la reserva recurrente: "cada lunes · 10 semanas: lun 9 nov → lun 11 ene".
+function updateWeeksPreview() {
+  const input = document.getElementById('weeksInput');
+  const out = document.getElementById('weeksPreview');
+  const max = state.config?.maxRecurringWeeks || 20;
+  const weeks = Number(input.value);
+  const first = readDateParts();
+  if (!Number.isInteger(weeks) || weeks < 1 || weeks > max) {
+    out.innerHTML = `Escribe un número de semanas entre <strong>1</strong> y <strong>${max}</strong>.`;
+    return;
+  }
+  if (weeks === 1) {
+    out.innerHTML = `Solo el <strong>${fmtLongDate(first)}</strong>.`;
+    return;
+  }
+  const [y, m, d] = first.split('-').map(Number);
+  const last = ymd(addDays(new Date(y, m - 1, d), 7 * (weeks - 1)));
+  out.innerHTML = `Se repite <strong>cada ${DOW_SING[weekdayOfYmd(first)]}</strong> durante `
+    + `<strong>${weeks} semanas</strong>: ${fmtShortDate(first)} → ${fmtShortDate(last)}.`;
+}
+
 function readDateParts() {
   const d = Number(document.getElementById('dateDay').value);
   const m = Number(document.getElementById('dateMonth').value);
@@ -558,6 +579,10 @@ function openReserve(prefill = {}) {
     form.elements.start.value = prefill.start;
     form.elements.end.value = minToHHMM(Math.min(toMin(cfg.closeHour), toMin(prefill.start) + 60));
   }
+  const weeksInput = document.getElementById('weeksInput');
+  weeksInput.max = cfg.maxRecurringWeeks || 20;
+  weeksInput.value = 1;
+  updateWeeksPreview();
   document.getElementById('timeHelp').textContent =
     `Horario del laboratorio: ${cfg.openHour}–${cfg.closeHour} (máx. ${cfg.maxHoursPerReservation} h por reserva). Puedes escribir cualquier hora, por ejemplo 11:15 a 12:45.`;
   document.getElementById('reserveMsg').hidden = true;
@@ -579,6 +604,14 @@ async function submitReserve(e) {
     msg.hidden = false;
     return;
   }
+  const maxWeeks = state.config.maxRecurringWeeks || 20;
+  const weeks = Number(payload.weeks);
+  if (!Number.isInteger(weeks) || weeks < 1 || weeks > maxWeeks) {
+    msg.innerHTML = `<ul><li>Las semanas deben ser un número entre 1 y ${maxWeeks}.</li></ul>`;
+    msg.hidden = false;
+    return;
+  }
+  payload.weeks = weeks;
   btn.disabled = true;
   btn.textContent = 'Enviando…';
   try {
@@ -588,13 +621,15 @@ async function submitReserve(e) {
       : await api('/api/reservations', { method: 'POST', body: JSON.stringify(payload) });
     hideModal('reserveModal');
     const pending = res.status === 'pending';
+    const many = (res.count || 1) > 1;
+    const span = many ? ` (${res.count} semanas: ${fmtShortDate(res.firstDate)} → ${fmtShortDate(res.lastDate)})` : '';
     document.getElementById('successTitle').textContent = pending ? 'Solicitud enviada' : 'Reserva confirmada';
     document.getElementById('successMsg').textContent = pending
-      ? 'Tu reserva quedó pendiente de aprobación. Guarda este código para consultar su estado (verifica que esté aprobada) o cancelarla.'
-      : 'Guarda este código para cancelar la reserva.';
+      ? `Tu reserva${span} quedó pendiente de aprobación. Guarda este código${many ? ' (sirve para toda la serie)' : ''} para consultar su estado (verifica que esté aprobada) o cancelarla.`
+      : `Reserva${span} creada. Guarda este código${many ? ' (sirve para toda la serie)' : ''} para cancelarla.`;
     document.getElementById('successCode').textContent = res.code;
     showModal('successModal');
-    toast(pending ? 'Solicitud enviada, pendiente de aprobación' : 'Reserva confirmada', 'success');
+    toast(many ? `${res.count} semanas ${pending ? 'solicitadas, pendientes de aprobación' : 'reservadas'}` : (pending ? 'Solicitud enviada, pendiente de aprobación' : 'Reserva confirmada'), 'success');
     await refresh();
     if (isAdmin()) await loadAdminList();
   } catch (err) {
@@ -618,20 +653,25 @@ function openDetail(r) {
     ${r.purpose ? `<div class="detail-row"><span>Detalle</span><span>${escapeHtml(r.purpose)}</span></div>` : ''}
     <div class="detail-row"><span>Responsable</span><span>${escapeHtml(r.name)}</span></div>
     <div class="detail-row"><span>Fecha</span><span>${fmtLongDate(r.date)}</span></div>
-    <div class="detail-row"><span>Horario</span><span>${r.start} – ${r.end} (${dur} h)</span></div>
+    <div class="detail-row"><span>Horario</span><span>${r.start} – ${r.end} (${Math.round(dur * 100) / 100} h)</span></div>
+    ${r.weeks > 1 ? `<div class="detail-row"><span>Serie semanal</span><span>semana ${r.week} de ${r.weeks}</span></div>` : ''}
     ${r.notes ? `<div class="detail-row"><span>Notas</span><span>${escapeHtml(r.notes)}</span></div>` : ''}
     <p class="muted" style="margin-top:14px">¿Cancelar esta reserva? Ingresa el código entregado al reservar.</p>
     <div class="cancel-box">
       <input id="cancelCode" maxlength="6" placeholder="CÓDIGO" />
-      <button class="btn btn-primary" id="cancelBtn">Cancelar reserva</button>
+    </div>
+    <div class="cancel-actions">
+      <button class="btn btn-primary" id="cancelBtn">${r.weeks > 1 ? 'Cancelar solo esta semana' : 'Cancelar reserva'}</button>
+      ${r.weeks > 1 ? `<button class="btn btn-no" id="cancelAllBtn">Cancelar las ${r.weeks} semanas</button>` : ''}
     </div>
     <div class="form-msg" id="cancelMsg" hidden></div>
   `;
   document.getElementById('cancelBtn').addEventListener('click', () => cancelReservation(r.id));
+  document.getElementById('cancelAllBtn')?.addEventListener('click', () => cancelReservation(r.id, 'series'));
   showModal('detailModal');
 }
 
-async function cancelReservation(id) {
+async function cancelReservation(id, scope) {
   const code = document.getElementById('cancelCode').value.trim().toUpperCase();
   const msg = document.getElementById('cancelMsg');
   if (code.length !== 6) {
@@ -640,9 +680,9 @@ async function cancelReservation(id) {
     return;
   }
   try {
-    await api(`/api/reservations/${id}/cancel`, { method: 'POST', body: JSON.stringify({ code }) });
+    const res = await api(`/api/reservations/${id}/cancel`, { method: 'POST', body: JSON.stringify({ code, scope }) });
     hideModal('detailModal');
-    toast('Reserva cancelada', 'success');
+    toast(res.removed > 1 ? `${res.removed} reservas canceladas` : 'Reserva cancelada', 'success');
     await refresh();
   } catch (err) {
     msg.textContent = (err.data?.errors || ['No se pudo cancelar.'])[0];
@@ -760,6 +800,7 @@ async function loadAdminList() {
   }
 }
 
+const DOW_SING = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
 const DOW_PLURAL = ['domingos', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábados'];
 const weekdayOfYmd = (s) => new Date(`${s}T00:00:00Z`).getUTCDay();
 
@@ -777,14 +818,16 @@ async function afterAdminChange() {
   if (state.admin.day) renderAdminDay();
 }
 
-async function adminAct(id, action, note) {
+async function adminAct(id, action, note, scope) {
   const verb = { approve: 'aprobar', reject: 'rechazar' }[action];
   try {
-    await adminApi(`/api/admin/reservations/${id}/${action}`, {
+    const res = await adminApi(`/api/admin/reservations/${id}/${action}${scope === 'series' ? '?scope=series' : ''}`, {
       method: 'POST',
       body: JSON.stringify({ note: note || '' }),
     });
-    toast(`Reserva ${action === 'approve' ? 'aprobada' : 'rechazada'}`, 'success');
+    const n = res.updated || 1;
+    const done = action === 'approve' ? 'aprobada' : 'rechazada';
+    toast(n > 1 ? `${n} reservas ${done}s` : `Reserva ${done}`, 'success');
     await afterAdminChange();
   } catch (err) {
     toast((err.data?.errors || [`No se pudo ${verb} la reserva.`])[0], 'error');
@@ -846,7 +889,7 @@ function adminRow(r) {
     <div class="admin-when">${fmtShortDate(r.date)}<small>${r.start}–${r.end} · ${Math.round(dur * 100) / 100} h</small></div>
     <div class="admin-what">
       <div class="who">${escapeHtml(r.course)}</div>
-      <div class="sub">${escapeHtml(r.name)} · <a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>${r.purpose ? ' · ' + escapeHtml(r.purpose) : ''}</div>
+      <div class="sub">${escapeHtml(r.name)} · <a href="mailto:${escapeHtml(r.email)}">${escapeHtml(r.email)}</a>${r.purpose ? ' · ' + escapeHtml(r.purpose) : ''}${r.seriesTotal > 1 ? ` · semana ${r.seriesIndex} de ${r.seriesTotal}` : ''}</div>
     </div>
     <div><span class="admin-status st-${status}">${STATUS_LABEL[status]}</span></div>
     <div class="admin-actions"></div>
@@ -867,6 +910,36 @@ function adminRow(r) {
   const del = el('button', 'btn btn-no', 'Eliminar');
   del.addEventListener('click', () => openDeleteDialog(r));
   actions.appendChild(del);
+  return row;
+}
+
+/* Solicitud recurrente pendiente: una sola fila con aprobar/rechazar todas las semanas. */
+function adminGroupRow(group) {
+  const first = group[0];
+  const last = group[group.length - 1];
+  const row = el('div', 'admin-row is-pending');
+  row.style.setProperty('--ev', courseColor(first.course));
+  row.innerHTML = `
+    <div class="admin-when">${DOW_PLURAL[weekdayOfYmd(first.date)]}<small>${first.start}–${first.end}</small></div>
+    <div class="admin-what">
+      <div class="who">${escapeHtml(first.course)} <span class="series-badge">${group.length} semanas</span></div>
+      <div class="sub">${fmtShortDate(first.date)} → ${fmtShortDate(last.date)} · ${escapeHtml(first.name)} · <a href="mailto:${escapeHtml(first.email)}">${escapeHtml(first.email)}</a>${first.purpose ? ' · ' + escapeHtml(first.purpose) : ''}</div>
+    </div>
+    <div><span class="admin-status st-pending">${STATUS_LABEL.pending}</span></div>
+    <div class="admin-actions"></div>
+    ${first.notes ? `<div class="admin-note">Nota: ${escapeHtml(first.notes)}</div>` : ''}
+  `;
+  const actions = row.querySelector('.admin-actions');
+  const ok = el('button', 'btn btn-ok', `Aprobar las ${group.length}`);
+  ok.addEventListener('click', () => adminAct(first.id, 'approve', '', 'series'));
+  const no = el('button', 'btn btn-no', 'Rechazar todas');
+  no.addEventListener('click', () => {
+    const note = prompt(`Motivo del rechazo de las ${group.length} semanas (opcional):`, '');
+    if (note !== null) adminAct(first.id, 'reject', note, 'series');
+  });
+  const del = el('button', 'btn btn-no', 'Eliminar');
+  del.addEventListener('click', () => openDeleteDialog(first));
+  actions.append(ok, no, del);
   return row;
 }
 
@@ -956,6 +1029,8 @@ function renderAdminCalendar(wrap) {
 function renderAdmin(root) {
   const list = state.admin.list;
   const pending = list.filter((r) => r.status === 'pending');
+  // El contador cuenta solicitudes: una serie semanal es una sola solicitud.
+  const pendingRequests = new Set(pending.map((r) => r.seriesId || r.id)).size;
   const tab = state.admin.tab === 'pending' ? 'pending' : 'calendar';
 
   const wrap = el('div', 'admin');
@@ -968,7 +1043,7 @@ function renderAdmin(root) {
     </div>
     <div class="admin-tabs">
       <button class="admin-tab ${tab === 'pending' ? 'is-active' : ''}" data-tab="pending">
-        Pendientes${pending.length ? `<span class="n">${pending.length}</span>` : ''}
+        Pendientes${pendingRequests ? `<span class="n">${pendingRequests}</span>` : ''}
       </button>
       <button class="admin-tab ${tab === 'calendar' ? 'is-active' : ''}" data-tab="calendar">Calendario</button>
     </div>`;
@@ -998,7 +1073,16 @@ function renderAdmin(root) {
       wrap.appendChild(el('div', 'empty-state', 'No hay solicitudes pendientes. Todo al día.'));
     } else {
       const table = el('div', 'admin-table');
-      shown.forEach((r) => table.appendChild(adminRow(r)));
+      const groups = new Map();
+      for (const r of shown) {
+        const key = r.seriesId || r.id;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(r);
+      }
+      for (const group of groups.values()) {
+        group.sort((a, b) => a.date.localeCompare(b.date));
+        table.appendChild(group.length > 1 ? adminGroupRow(group) : adminRow(group[0]));
+      }
       wrap.appendChild(table);
     }
   }
@@ -1032,6 +1116,9 @@ function bindUI() {
   document.getElementById('todayBtn').addEventListener('click', () => { state.anchor = startOfDay(new Date()); refresh(); });
   document.getElementById('reserveForm').addEventListener('submit', submitReserve);
   bindTimeInputs();
+  document.getElementById('weeksInput').addEventListener('input', updateWeeksPreview);
+  ['dateDay', 'dateMonth', 'dateYear'].forEach((id) =>
+    document.getElementById(id).addEventListener('change', updateWeeksPreview));
 
   // Re-render al cruzar el breakpoint móvil (semana ↔ día, grillas, etc.)
   let wasMobile = isMobile();

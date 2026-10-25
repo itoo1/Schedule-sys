@@ -149,9 +149,17 @@
           </label>
         </div>
         <p class="field-help" id="timeHelp"></p>
+        <div class="field weeks-field">
+          <span>¿Por cuántas semanas? <em class="field-hint">(1 = solo esa fecha)</em></span>
+          <div class="weeks-row">
+            <input name="weeks" id="weeksInput" type="number" min="1" max="20" value="1" step="1"
+                   inputmode="numeric" required aria-label="Número de semanas" />
+            <p class="weeks-preview" id="weeksPreview"></p>
+          </div>
+        </div>
         <label class="field">
           <span>Notas para el encargado (opcional)</span>
-          <textarea name="notes" rows="2" placeholder="Requiero acceso a 4 terminales / datos de renta fija…"></textarea>
+          <textarea name="notes" rows="2" placeholder="Ej: necesito varios terminales / datos de renta fija…"></textarea>
         </label>
 
         <div class="form-msg" id="reserveMsg" hidden></div>
