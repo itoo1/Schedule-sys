@@ -173,19 +173,21 @@ function renderSidebar() {
     <li><span>Horario</span><span>${c.openHour}–${c.closeHour}</span></li>
     <li><span>Días</span><span>${openDaysLabel}</span></li>
     <li><span>Máx. por reserva</span><span>${c.maxHoursPerReservation} h</span></li>
-    <li><span>Anticipación mínima</span><span>${c.minAdvanceDays} días</span></li>
+    ${c.minAdvanceDays > 0 ? `<li><span>Anticipación mínima</span><span>${c.minAdvanceDays} días</span></li>` : ''}
     <li><span>Aprobación</span><span>${c.requireApproval ? 'requerida' : 'automática'}</span></li>
   `;
 
   if (isAdmin()) {
-    document.getElementById('topbarNoteText').innerHTML =
-      '<strong>Modo administrador</strong> · puedes reservar sin anticipación mínima · tus reservas quedan aprobadas de inmediato';
+    document.getElementById('topbarNoteText').innerHTML = c.minAdvanceDays > 0
+      ? '<strong>Modo administrador</strong> · puedes reservar sin anticipación mínima · tus reservas quedan aprobadas de inmediato'
+      : '<strong>Modo administrador</strong> · tus reservas quedan aprobadas de inmediato';
     document.getElementById('topbarNote').hidden = false;
   } else if (c.minAdvanceDays > 0 || c.requireApproval) {
     const parts = [];
     if (c.minAdvanceDays > 0) parts.push(`Reserva con <strong>${c.minAdvanceDays}+ días</strong> de anticipación`);
     if (c.requireApproval) parts.push('las reservas quedan <strong>pendientes de aprobación</strong>, verifica que esté aprobada');
-    document.getElementById('topbarNoteText').innerHTML = parts.join(' · ');
+    const text = parts.join(' · ');
+    document.getElementById('topbarNoteText').innerHTML = text.charAt(0).toUpperCase() + text.slice(1);
     document.getElementById('topbarNote').hidden = false;
   } else {
     document.getElementById('topbarNote').hidden = true;
@@ -557,7 +559,9 @@ function openReserve(prefill = {}) {
   // Aviso visible con las reglas de reserva.
   const noteParts = [];
   if (admin) {
-    noteParts.push('<strong>Modo administrador:</strong> puedes reservar sin anticipación mínima y la reserva queda <strong>aprobada de inmediato</strong>.');
+    noteParts.push(cfg.minAdvanceDays > 0
+      ? '<strong>Modo administrador:</strong> puedes reservar sin anticipación mínima y la reserva queda <strong>aprobada de inmediato</strong>.'
+      : '<strong>Modo administrador:</strong> la reserva queda <strong>aprobada de inmediato</strong>.');
   } else {
     if (cfg.minAdvanceDays > 0) {
       noteParts.push(`Las reservas se solicitan con al menos <strong>${cfg.minAdvanceDays} días</strong> de anticipación (desde el ${fmtLongDate(earliestStr)}).`);

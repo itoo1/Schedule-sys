@@ -68,7 +68,7 @@ const LAB_CONFIG = {
   slotMinutes: 60,
   terminals: 15,
   maxHoursPerReservation: 4,
-  minAdvanceDays: 7, // anticipación mínima para solicitar una reserva
+  minAdvanceDays: 0, // días de anticipación mínima para reservar (0 = sin restricción)
   maxRecurringWeeks: 20, // máximo de semanas que se pueden reservar de una sola vez
   requireApproval: true, // las reservas quedan pendientes hasta que un administrador las aprueba
   courses: [
