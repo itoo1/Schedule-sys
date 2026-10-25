@@ -839,3 +839,30 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
   .admin-tabs { width: 100%; }
   .admin-tab { flex: 1; text-align: center; padding: 8px 4px; }
 }
+
+/* ---------------------------------------------------------------- recomendación: escritorio */
+.mobile-banner, .mobile-tip { display: none; }
+.foot-link { color: var(--accent); margin-left: 4px; }
+@media (max-width: 640px) {
+  .mobile-banner:not([hidden]) {
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    background: var(--accent-soft);
+    border-bottom: 1px solid var(--accent-line);
+    font-size: 12px;
+    line-height: 1.4;
+    color: var(--text-dim);
+  }
+  .mobile-banner strong { color: var(--text); }
+  .mb-actions { display: flex; align-items: center; gap: 8px; }
+  .mb-actions .btn { flex: 1; padding: 8px 10px; font-size: 12.5px; }
+  .mobile-tip {
+    display: block;
+    font-size: 11.5px;
+    color: var(--accent);
+    margin: -4px 0 0;
+  }
+}

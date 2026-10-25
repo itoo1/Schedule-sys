@@ -46,6 +46,33 @@ function minToHHMM(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:$
 function sameYMD(a, b) { return ymd(a) === ymd(b); }
 function isToday(d) { return sameYMD(d, new Date()); }
 function isAdmin() { return Boolean(state.admin.token); }
+/* Sugerencia de usar la versión de escritorio en celulares. */
+function forcedDesktop() {
+  try { return localStorage.getItem('bfl_desktop') === '1'; } catch { return false; }
+}
+function setForcedDesktop(on) {
+  try { if (on) localStorage.setItem('bfl_desktop', '1'); else localStorage.removeItem('bfl_desktop'); } catch { /* ignore */ }
+  location.reload();
+}
+function bindDesktopSuggestion() {
+  const banner = document.getElementById('mobileBanner');
+  let dismissed = false;
+  try { dismissed = sessionStorage.getItem('bfl_banner_closed') === '1'; } catch { /* ignore */ }
+  banner.hidden = dismissed || !isMobile();           // el CSS solo lo muestra en pantallas chicas
+
+  document.getElementById('desktopBtn').addEventListener('click', () => setForcedDesktop(true));
+  document.getElementById('bannerClose').addEventListener('click', () => {
+    banner.hidden = true;
+    try { sessionStorage.setItem('bfl_banner_closed', '1'); } catch { /* ignore */ }
+  });
+
+  // Si se forzó el escritorio en un celular, se ofrece volver a la versión móvil.
+  const small = Math.min(screen.width, screen.height) <= 640;
+  const toggle = document.getElementById('viewToggle');
+  toggle.hidden = !(forcedDesktop() && small);
+  toggle.addEventListener('click', (e) => { e.preventDefault(); setForcedDesktop(false); });
+}
+
 function isMobile() { return window.matchMedia('(max-width: 640px)').matches; }
 function snapToOpenDay(d, dir = 1) {
   const open = state.config?.openDays || [1, 2, 3, 4, 5];
@@ -1120,6 +1147,7 @@ function bindUI() {
   document.getElementById('todayBtn').addEventListener('click', () => { state.anchor = startOfDay(new Date()); refresh(); });
   document.getElementById('reserveForm').addEventListener('submit', submitReserve);
   bindTimeInputs();
+  bindDesktopSuggestion();
   document.getElementById('weeksInput').addEventListener('input', updateWeeksPreview);
   ['dateDay', 'dateMonth', 'dateYear'].forEach((id) =>
     document.getElementById(id).addEventListener('change', updateWeeksPreview));
