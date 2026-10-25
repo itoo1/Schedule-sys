@@ -842,13 +842,13 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
 
 /* ---------------------------------------------------------------- recomendación: escritorio */
 .mobile-banner, .mobile-tip { display: none; }
-.foot-link { color: var(--accent); margin-left: 4px; }
 @media (max-width: 640px) {
   .mobile-banner:not([hidden]) {
     flex: none;
     display: flex;
-    flex-direction: column;
-    gap: 8px;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 10px;
     padding: 10px 12px;
     background: var(--accent-soft);
     border-bottom: 1px solid var(--accent-line);
@@ -857,8 +857,7 @@ h1, h2, h3 { font-weight: 600; letter-spacing: -0.01em; }
     color: var(--text-dim);
   }
   .mobile-banner strong { color: var(--text); }
-  .mb-actions { display: flex; align-items: center; gap: 8px; }
-  .mb-actions .btn { flex: 1; padding: 8px 10px; font-size: 12.5px; }
+  .mobile-banner .icon-btn { flex: none; }
   .mobile-tip {
     display: block;
     font-size: 11.5px;

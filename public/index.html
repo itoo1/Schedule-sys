@@ -3,10 +3,6 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <script>
-    // Si el usuario eligió "versión de escritorio" en un celular, se usa un viewport ancho.
-    try { if (localStorage.getItem('bfl_desktop') === '1') document.querySelector('meta[name=viewport]').content = 'width=1100'; } catch (e) {}
-  </script>
   <title>Lab Finanzas Itaú UdeC · Reservas</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -60,10 +56,7 @@
     <main class="main">
       <div class="mobile-banner" id="mobileBanner" hidden>
         <span class="mb-text"><strong>Te recomendamos usar la versión de escritorio</strong> (computador) para reservar con mayor comodidad.</span>
-        <div class="mb-actions">
-          <button class="btn btn-primary" id="desktopBtn">Ver versión de escritorio</button>
-          <button class="icon-btn" id="bannerClose" aria-label="Cerrar aviso">×</button>
-        </div>
+        <button class="icon-btn" id="bannerClose" aria-label="Cerrar aviso">×</button>
       </div>
       <header class="topbar">
         <div class="topbar-line">
@@ -101,7 +94,6 @@
 
       <footer class="app-foot">
         Sitio entregado por el <strong>Finance Club UdeC</strong> · Universidad de Concepción
-        <a href="#" id="viewToggle" class="foot-link" hidden>· Volver a la versión móvil</a>
       </footer>
     </main>
   </div>

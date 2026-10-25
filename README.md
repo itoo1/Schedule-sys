@@ -27,8 +27,7 @@ tipo terminal financiera.
   en un día se ven sus reservas y se pueden eliminar eligiendo entre *solo esta reserva* o
   *todas las del semestre en ese horario* (mismo día de la semana, horario, curso y responsable).
   Si se activa `minAdvanceDays`, el administrador puede reservar sin esa anticipación.
-- **Recomendación de escritorio**: en celulares se muestra un aviso (con botón *Ver versión
-  de escritorio*, que fuerza una vista ancha; se vuelve con el enlace del pie de página) y un
+- **Recomendación de escritorio**: en celulares se muestra un aviso (que se puede cerrar) y un
   recordatorio dentro del formulario de reserva.
 - **Código de cancelación**: cada reserva entrega un código de 6 caracteres necesario
   para cancelarla o consultar su estado.

@@ -46,32 +46,22 @@ function minToHHMM(m) { return `${String(Math.floor(m / 60)).padStart(2, '0')}:$
 function sameYMD(a, b) { return ymd(a) === ymd(b); }
 function isToday(d) { return sameYMD(d, new Date()); }
 function isAdmin() { return Boolean(state.admin.token); }
-/* Sugerencia de usar la versión de escritorio en celulares. */
-function forcedDesktop() {
-  try { return localStorage.getItem('bfl_desktop') === '1'; } catch { return false; }
-}
-function setForcedDesktop(on) {
-  try { if (on) localStorage.setItem('bfl_desktop', '1'); else localStorage.removeItem('bfl_desktop'); } catch { /* ignore */ }
-  location.reload();
-}
+/* Aviso que recomienda usar la versión de escritorio; solo se muestra en celulares. */
 function bindDesktopSuggestion() {
+  try { localStorage.removeItem('bfl_desktop'); } catch { /* limpia la preferencia de una versión anterior */ }
   const banner = document.getElementById('mobileBanner');
   let dismissed = false;
   try { dismissed = sessionStorage.getItem('bfl_banner_closed') === '1'; } catch { /* ignore */ }
   banner.hidden = dismissed || !isMobile();           // el CSS solo lo muestra en pantallas chicas
-
-  document.getElementById('desktopBtn').addEventListener('click', () => setForcedDesktop(true));
   document.getElementById('bannerClose').addEventListener('click', () => {
     banner.hidden = true;
     try { sessionStorage.setItem('bfl_banner_closed', '1'); } catch { /* ignore */ }
   });
-
-  // Si se forzó el escritorio en un celular, se ofrece volver a la versión móvil.
-  const small = Math.min(screen.width, screen.height) <= 640;
-  const toggle = document.getElementById('viewToggle');
-  toggle.hidden = !(forcedDesktop() && small);
-  toggle.addEventListener('click', (e) => { e.preventDefault(); setForcedDesktop(false); });
 }
+
+// Día que realmente muestra la vista Semana: si el ancla cae en un día cerrado (fin de semana)
+// se usa el siguiente día hábil. Rango de datos, título y grilla deben usar siempre este mismo día.
+function viewDay() { return snapToOpenDay(state.anchor); }
 
 function isMobile() { return window.matchMedia('(max-width: 640px)').matches; }
 function snapToOpenDay(d, dir = 1) {
@@ -139,7 +129,7 @@ function setAdminToken(token) {
 
 function computeRange() {
   if (state.view === 'week') {
-    const from = mondayOf(state.anchor);
+    const from = mondayOf(viewDay());
     return { from: ymd(from), to: ymd(addDays(from, 6)) };
   }
   if (state.view === 'month') {
@@ -254,10 +244,10 @@ function renderTopbar() {
 
   if (state.view === 'week') {
     if (isMobile()) {
-      const d = snapToOpenDay(a);
+      const d = viewDay();
       t.textContent = `${DOW_SHORT[d.getDay()]} ${d.getDate()} ${MESES[d.getMonth()].slice(0, 3)} ${d.getFullYear()}`;
     } else {
-      const mon = mondayOf(a);
+      const mon = mondayOf(viewDay());
       const fri = addDays(mon, 4);
       const sameMonth = mon.getMonth() === fri.getMonth();
       t.textContent = sameMonth
@@ -294,9 +284,9 @@ function renderWeek(root) {
   let days;
   if (isMobile()) {
     // En móvil la vista "Semana" muestra un solo día (se navega día a día).
-    days = [snapToOpenDay(state.anchor)];
+    days = [viewDay()];
   } else {
-    const mon = mondayOf(state.anchor);
+    const mon = mondayOf(viewDay());
     days = c.openDays.map((dow) => addDays(mon, dow === 0 ? 6 : dow - 1));
   }
 
@@ -1123,9 +1113,10 @@ function renderAdmin(root) {
 /* ---------------------------------------------------------------- navigation */
 function step(dir) {
   if (state.view === 'week') {
+    // Se avanza desde el día que realmente se está viendo (no desde un ancla en fin de semana).
     state.anchor = isMobile()
-      ? snapToOpenDay(addDays(state.anchor, dir), dir)
-      : addDays(state.anchor, dir * 7);
+      ? snapToOpenDay(addDays(viewDay(), dir), dir)
+      : addDays(viewDay(), dir * 7);
   } else if (state.view === 'month') {
     state.anchor = new Date(state.anchor.getFullYear(), state.anchor.getMonth() + dir, 1);
   } else {

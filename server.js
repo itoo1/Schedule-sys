@@ -15,6 +15,7 @@ import {
   replaceAllReservations,
   hasConflict,
   storageBackend,
+  storeInitialized,
 } from './db.js';
 import { buildSchedule } from './schedule.js';
 
@@ -43,8 +44,9 @@ function ensureBootstrap() {
   if (!bootstrapPromise) {
     bootstrapPromise = (async () => {
       if (process.env.BOOTSTRAP_SCHEDULE === '0') return;
-      const existing = await getReservations();
-      if (existing.length > 0) return;
+      // Solo se carga el horario si el almacén nunca existió. Que esté vacío (o ilegible) no basta:
+      // así un fallo transitorio de lectura no puede reemplazar las reservas existentes.
+      if (await storeInitialized()) return;
       await replaceAllReservations(buildSchedule());
       console.log('  Horario del semestre cargado automáticamente (base vacía).');
     })().catch((err) => {

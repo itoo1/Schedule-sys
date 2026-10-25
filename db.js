@@ -49,15 +49,23 @@ async function ensureFile() {
 async function readAll() {
   if (USE_REDIS) {
     const data = await redis.get(REDIS_KEY); // @upstash/redis deserializa JSON automáticamente
-    return Array.isArray(data) ? data : [];
+    if (data === null || data === undefined) return [];
+    if (Array.isArray(data)) return data;
+    // Un valor con formato inesperado NO se trata como "vacío": sobrescribirlo borraría las reservas.
+    throw new Error('Formato inesperado en la base de datos de reservas; no se modificó nada.');
   }
   await ensureFile();
-  try {
-    const parsed = JSON.parse(await readFile(DATA_FILE, 'utf8'));
-    return Array.isArray(parsed.reservations) ? parsed.reservations : [];
-  } catch {
-    return [];
+  const parsed = JSON.parse(await readFile(DATA_FILE, 'utf8')); // si el archivo está dañado, falla en vez de vaciarlo
+  if (!Array.isArray(parsed.reservations)) {
+    throw new Error('Formato inesperado en data/reservations.json; no se modificó nada.');
   }
+  return parsed.reservations;
+}
+
+/** ¿Ya existe el almacén de reservas? (false solo en un despliegue totalmente nuevo) */
+export async function storeInitialized() {
+  if (USE_REDIS) return (await redis.exists(REDIS_KEY)) === 1;
+  return existsSync(DATA_FILE);
 }
 
 async function writeAll(list) {
